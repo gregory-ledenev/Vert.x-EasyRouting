@@ -1,0 +1,15 @@
+<html xmlns:th="https://www.thymeleaf.org">
+<body>
+<div>
+    <form method="POST" enctype="multipart/form-data" action="/files/uploadFile">
+        <table>
+            <tr><td>File to upload:</td><td><input type="file" name="file" /></td></tr>
+            <tr>
+                <td><input type="submit" value="Upload" th:disabled="${!checked}"/></td>
+            </tr>
+
+        </table>
+    </form>
+</div>
+</body>
+</html>
