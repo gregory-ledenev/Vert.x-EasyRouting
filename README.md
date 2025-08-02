@@ -81,8 +81,7 @@ public class Application {
 
 ## Adding to Your Build
 
-To add to your build: copy `com.gl.vertx.easyrouting` classes to your project and add
-it to your classpath.
+To add to your build: copy `com.gl.vertx.easyrouting` classes to your Vert.x project.
 
 ## License
 

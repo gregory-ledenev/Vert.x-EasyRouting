@@ -44,6 +44,7 @@ public class TestEasyRouting {
 //                        testPath(client, "/?name=John");
 //                        testPath(client, "/greeting/?name=Woo%20Hoo!");
 //                        testPath(client, "/files/serveFile?fileName=nntws-overview.jpeg");
+                        createUser(client);
                     } else {
                         System.err.println("Failed to deploy test verticle: " + deployment.cause());
                     }
@@ -51,6 +52,27 @@ public class TestEasyRouting {
         try {
             Thread.sleep(500000);
         } catch (InterruptedException aE) {
+        }
+    }
+
+    private static void createUser(HttpClient client) {
+        String jsonUser = """
+                {
+                    "id": "123",
+                    "name": "John Doe"
+                }""";
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://" + HOST + ":" + PORT + "/users"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonUser))
+                .build();
+
+        try {
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            System.out.println("Create user response: " + response.body());
+        } catch (Exception e) {
+            fail(e);
         }
     }
 
@@ -143,6 +165,12 @@ public class TestEasyRouting {
         @GET("/greeting/*")
         public String getGreeting() {
             return "Greeting!!!";
+        }
+
+        @HttpMethods.POST("/users")
+        public User createUser(@BodyParam("user") User user) {
+            // Create a new user
+            return new User(user.id(), user.name());
         }
 
         @HttpMethods.GET("/users/:id")

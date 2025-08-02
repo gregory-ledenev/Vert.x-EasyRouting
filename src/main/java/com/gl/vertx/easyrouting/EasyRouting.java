@@ -207,23 +207,19 @@ public class EasyRouting {
                     ctx.response().setStatusCode(404).end("No handler method for annotation: \"" + annotation + "\" and parameters: " + ctx.request().params());
                 } else {
                     if (handlerMethod.hasBodyParam) {
-                        ctx.request().body().onComplete(bodyRes -> {
-                            if (bodyRes.succeeded()) {
-                                try {
-                                    Object[] args = methodParameterValues(ctx, handlerMethod.method(), handlerMethod.parameterNames, handlerMethod.method().getParameterTypes(), ctx.request().params(), bodyRes.result());
-                                    Object result = handlerMethod.method().invoke(target, args);
-                                    processHandlerResult(handlerMethod.method(), ctx, result);
-                                } catch (Exception e) {
-                                    ctx.response()
-                                            .setStatusCode(500)
-                                            .end("Internal Server Error");
-                                    LoggerFactory.getLogger(target.getClass()).
-                                            error("Error loading request body", e);
-                                }
-                            } else {
-                                ctx.response().setStatusCode(400).end("Invalid request body");
-                            }
-                        });
+                        // Use the already parsed body instead of reading it again
+                        Buffer bodyBuffer = ctx.getBody();
+                        try {
+                            Object[] args = methodParameterValues(ctx, handlerMethod.method(), handlerMethod.parameterNames, handlerMethod.method().getParameterTypes(), ctx.request().params(), bodyBuffer);
+                            Object result = handlerMethod.method().invoke(target, args);
+                            processHandlerResult(handlerMethod.method(), ctx, result);
+                        } catch (Exception e) {
+                            ctx.response()
+                                    .setStatusCode(500)
+                                    .end("Internal Server Error");
+                            LoggerFactory.getLogger(target.getClass()).
+                                    error("Error processing request body", e);
+                        }
                     } else {
                         Object[] args = methodParameterValues(ctx, handlerMethod.method(), handlerMethod.parameterNames, handlerMethod.method().getParameterTypes(), ctx.request().params(), null);
                         Object result = handlerMethod.method().invoke(target, args);
