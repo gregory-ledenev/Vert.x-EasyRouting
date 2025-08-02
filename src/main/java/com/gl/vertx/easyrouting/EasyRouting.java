@@ -39,44 +39,47 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.text.MessageFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 
 /**
- * EasyRouting provides annotation-based HTTP request handling for Vert.x web applications.
- * It simplifies route configuration by allowing developers to define routes using annotations
- * and automatically handles parameter binding and response processing.
+ * EasyRouting provides annotation-based HTTP request handling for Vert.x web applications. It simplifies route
+ * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
+ * and response processing.
  */
 public class EasyRouting {
-  public static final String REDIRECT = "redirect:";
-  private static final String ERROR_HANDLING_ANNOTATED_METHOD = "Error handling annotated method: \"{0}\" for parameters: \"{1}\" {2}";
+    public static final String REDIRECT = "redirect:";
+    private static final String ERROR_HANDLING_ANNOTATED_METHOD = "Error handling annotated method: \"{0}\" for parameters: \"{1}\" {2}";
 
     /**
-     * Sets up HTTP request handlers for all supported HTTP methods (GET, POST, DELETE, PUT, PATCH)
-     * based on annotated methods in the target object.
+     * Sets up HTTP request handlers for all supported HTTP methods (GET, POST, DELETE, PUT, PATCH) based on annotated
+     * methods in the target object.
      *
      * @param router the Vert.x Router instance to configure
      * @param target the object containing annotated handler methods
      */
     public static void setupHandlers(Router router, Object target) {
-    setupHandlers(router, HttpMethods.GET.class, target);
-    setupHandlers(router, HttpMethods.POST.class, target);
-    setupHandlers(router, HttpMethods.DELETE.class, target);
-    setupHandlers(router, HttpMethods.PUT.class, target);
-    setupHandlers(router, HttpMethods.PATCH.class, target);
-  }
+        setupHandlers(router, HttpMethods.GET.class, target);
+        setupHandlers(router, HttpMethods.POST.class, target);
+        setupHandlers(router, HttpMethods.DELETE.class, target);
+        setupHandlers(router, HttpMethods.PUT.class, target);
+        setupHandlers(router, HttpMethods.PATCH.class, target);
+    }
 
-  private static List<Method> listHandlerMethods(Class<? extends Annotation> annotationClass, Object target) {
-      List<Method> methods = new ArrayList<>();
-      for (Method method : target.getClass().getDeclaredMethods()) {
-          Annotation annotation = method.getAnnotation(annotationClass);
-          if (annotation != null) {
-              methods.add(method);
-          }
-      }
-      sortMethods(methods, annotationClass);
-      return methods;
-  }
+    private static List<Method> listHandlerMethods(Class<? extends Annotation> annotationClass, Object target) {
+        List<Method> methods = new ArrayList<>();
+        for (Method method : target.getClass().getDeclaredMethods()) {
+            Annotation annotation = method.getAnnotation(annotationClass);
+            if (annotation != null) {
+                methods.add(method);
+            }
+        }
+        sortMethods(methods, annotationClass);
+        return methods;
+    }
 
     private static void sortMethods(List<Method> methods, Class<? extends Annotation> annotationClass) {
         methods.sort((m1, m2) -> {
@@ -196,200 +199,199 @@ public class EasyRouting {
         }
     }
 
-  private static Handler<RoutingContext> createHandler(Annotation annotation, Object target) {
-    return ctx -> {
-      try {
-        MethodResult handlerMethod = getMethod(annotation, ctx.request().params(), target);
-        if (handlerMethod == null) {
-          ctx.response().setStatusCode(404).end("No handler method for annotation: \"" + annotation + "\" and parameters: " + ctx.request().params());
-        } else {
-          if (handlerMethod.hasBodyParam) {
-            ctx.request().body().onComplete(bodyRes -> {
-              if (bodyRes.succeeded()) {
-                try {
-                  Object[] args = methodParameterValues(ctx, handlerMethod.method(), handlerMethod.parameterNames, handlerMethod.method().getParameterTypes(), ctx.request().params(), bodyRes.result());
-                  Object result = handlerMethod.method().invoke(target, args);
-                  processHandlerResult(handlerMethod.method(), ctx, result);
-                } catch (Exception e) {
-                  ctx.response()
-                    .setStatusCode(500)
-                    .end("Internal Server Error");
-                  LoggerFactory.getLogger(target.getClass()).
-                    error("Error loading request body", e);
+    private static Handler<RoutingContext> createHandler(Annotation annotation, Object target) {
+        return ctx -> {
+            try {
+                MethodResult handlerMethod = getMethod(annotation, ctx.request().params(), target);
+                if (handlerMethod == null) {
+                    ctx.response().setStatusCode(404).end("No handler method for annotation: \"" + annotation + "\" and parameters: " + ctx.request().params());
+                } else {
+                    if (handlerMethod.hasBodyParam) {
+                        ctx.request().body().onComplete(bodyRes -> {
+                            if (bodyRes.succeeded()) {
+                                try {
+                                    Object[] args = methodParameterValues(ctx, handlerMethod.method(), handlerMethod.parameterNames, handlerMethod.method().getParameterTypes(), ctx.request().params(), bodyRes.result());
+                                    Object result = handlerMethod.method().invoke(target, args);
+                                    processHandlerResult(handlerMethod.method(), ctx, result);
+                                } catch (Exception e) {
+                                    ctx.response()
+                                            .setStatusCode(500)
+                                            .end("Internal Server Error");
+                                    LoggerFactory.getLogger(target.getClass()).
+                                            error("Error loading request body", e);
+                                }
+                            } else {
+                                ctx.response().setStatusCode(400).end("Invalid request body");
+                            }
+                        });
+                    } else {
+                        Object[] args = methodParameterValues(ctx, handlerMethod.method(), handlerMethod.parameterNames, handlerMethod.method().getParameterTypes(), ctx.request().params(), null);
+                        Object result = handlerMethod.method().invoke(target, args);
+                        processHandlerResult(handlerMethod.method(), ctx, result);
+                    }
                 }
-              } else {
-                ctx.response().setStatusCode(400).end("Invalid request body");
-              }
-            });
-          } else {
-            Object[] args = methodParameterValues(ctx, handlerMethod.method(), handlerMethod.parameterNames, handlerMethod.method().getParameterTypes(), ctx.request().params(), null);
-            Object result = handlerMethod.method().invoke(target, args);
-            processHandlerResult(handlerMethod.method(), ctx, result);
-          }
+            } catch (HttpException e) {
+                ctx.response().setStatusCode(e.getStatusCode()).end(e.getPayload());
+                LoggerFactory.getLogger(target.getClass()).
+                        error(MessageFormat.format(ERROR_HANDLING_ANNOTATED_METHOD,
+                                annotation,
+                                ctx.request().params().names(),
+                                e));
+            } catch (Exception e) {
+                ctx.response().setStatusCode(500).end("Internal Server Error");
+                LoggerFactory.getLogger(target.getClass()).
+                        error(MessageFormat.format(ERROR_HANDLING_ANNOTATED_METHOD,
+                                annotation,
+                                ctx.request().params().names(),
+                                e));
+            }
+        };
+    }
+
+    record MethodResult(Method method, String[] parameterNames, boolean hasBodyParam) {
+    }
+
+    private static MethodResult getMethod(Annotation annotation, MultiMap parameters, Object target) {
+        MultiMap lowercaseParams = MultiMap.caseInsensitiveMultiMap();
+        parameters.forEach(entry -> lowercaseParams.add(entry.getKey().toLowerCase(), entry.getValue()));
+        parameters = lowercaseParams;
+
+        for (Method method : target.getClass().getDeclaredMethods()) {
+            Annotation methodAnnotation = method.getAnnotation(annotation.annotationType());
+            if (methodAnnotation != null && methodAnnotation.equals(annotation)) {
+                List<String> paramNames = new ArrayList<>();
+                int matchedParamCount = 0;
+                int optionalParamCount = 0;
+                int otherParamCount = 0;
+                boolean hasBodyParam = false;
+
+                Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+                for (Annotation[] annotations : parameterAnnotations) {
+                    if (annotations.length == 0)
+                        continue;
+                    Annotation paramAnnotation = annotations[0];
+                    if (paramAnnotation instanceof Param param) {
+                        paramNames.add(param.value());
+                        if (lowercaseParams.get(param.value().toLowerCase()) != null)
+                            matchedParamCount++;
+                    } else if (paramAnnotation instanceof OptionalParam param) {
+                        paramNames.add(param.value());
+                        matchedParamCount++;
+                        if (lowercaseParams.get(param.value().toLowerCase()) == null)
+                            optionalParamCount++;
+                    } else if (paramAnnotation instanceof BodyParam param) {
+                        otherParamCount++;
+                        hasBodyParam = true;
+                        paramNames.add(param.value());
+                    } else if (paramAnnotation instanceof UploadsParam param) {
+                        otherParamCount++;
+                        paramNames.add("uploads");
+                    }
+                }
+
+                int totalParamCount = matchedParamCount + otherParamCount;
+                if (method.getParameterCount() == totalParamCount && matchedParamCount == parameters.size() + optionalParamCount) {
+                    return new MethodResult(method, paramNames.toArray(new String[0]), hasBodyParam);
+                }
+            }
         }
-      } catch (HttpException e) {
-        ctx.response().setStatusCode(e.getStatusCode()).end(e.getPayload());
-          LoggerFactory.getLogger(target.getClass()).
-                  error(MessageFormat.format(ERROR_HANDLING_ANNOTATED_METHOD,
-                          annotation,
-                          ctx.request().params().names(),
-                          e));
-      }
-      catch (Exception e) {
-        ctx.response().setStatusCode(500).end("Internal Server Error");
-        LoggerFactory.getLogger(target.getClass()).
-          error(MessageFormat.format(ERROR_HANDLING_ANNOTATED_METHOD,
-            annotation,
-            ctx.request().params().names(),
-            e));
-      }
-    };
-  }
+        return null;
+    }
 
-  record MethodResult(Method method, String[] parameterNames, boolean hasBodyParam) {
-  }
+    private static Object[] methodParameterValues(RoutingContext ctx, Method method,
+                                                  String[] parameterNames,
+                                                  Class<?>[] parameterTypes,
+                                                  MultiMap requestParameters,
+                                                  Object body) {
+        List<Object> result = new ArrayList<>();
 
-  private static MethodResult getMethod(Annotation annotation, MultiMap parameters, Object target) {
-      MultiMap lowercaseParams = MultiMap.caseInsensitiveMultiMap();
-      parameters.forEach(entry -> lowercaseParams.add(entry.getKey().toLowerCase(), entry.getValue()));
-      parameters = lowercaseParams;
+        Parameter[] parameters = method.getParameters();
 
-      for (Method method : target.getClass().getDeclaredMethods()) {
-      Annotation methodAnnotation = method.getAnnotation(annotation.annotationType());
-      if (methodAnnotation != null && methodAnnotation.equals(annotation)) {
-        List<String> paramNames = new ArrayList<>();
-        int matchedParamCount = 0;
-        int optionalParamCount = 0;
-        int otherParamCount = 0;
-        boolean hasBodyParam = false;
+        for (int i = 0; i < parameterNames.length; i++) {
+            Parameter parameter = parameters[i];
 
-        Annotation[][] parameterAnnotations = method.getParameterAnnotations();
-        for (Annotation[] annotations : parameterAnnotations) {
-          if (annotations.length == 0)
-            continue;
-          Annotation paramAnnotation = annotations[0];
-          if (paramAnnotation instanceof Param param) {
-            paramNames.add(param.value());
-            if (lowercaseParams.get(param.value().toLowerCase()) != null)
-              matchedParamCount++;
-          } else if (paramAnnotation instanceof OptionalParam param) {
-            paramNames.add(param.value());
-            matchedParamCount++;
-            if (lowercaseParams.get(param.value().toLowerCase()) == null)
-              optionalParamCount++;
-          } else if (paramAnnotation instanceof BodyParam param) {
-            otherParamCount++;
-            hasBodyParam = true;
-            paramNames.add(param.value());
-          } else if (paramAnnotation instanceof UploadsParam param) {
-            otherParamCount++;
-            paramNames.add("uploads");
-          }
+            if (parameter.getAnnotation(BodyParam.class) != null) {
+                result.add(convertBody(parameterTypes[i], body));
+            } else if (parameter.getAnnotation(UploadsParam.class) != null) {
+                result.add(ctx.fileUploads());
+            } else {
+                result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters));
+            }
         }
 
-        int totalParamCount = matchedParamCount + otherParamCount;
-        if (method.getParameterCount() == totalParamCount && matchedParamCount == parameters.size() + optionalParamCount) {
-          return new MethodResult(method, paramNames.toArray(new String[0]), hasBodyParam);
+        return result.toArray(new Object[0]);
+    }
+
+    private static Object convertBody(Class<?> parameterType, Object body) {
+        if (body == null) {
+            return null;
         }
-      }
-    }
-    return null;
-  }
 
-  private static Object[] methodParameterValues(RoutingContext ctx, Method method,
-                                                String[] parameterNames,
-                                                Class<?>[] parameterTypes,
-                                                MultiMap requestParameters,
-                                                Object body) {
-    List<Object> result = new ArrayList<>();
+        if (parameterType == String.class) {
+            return body.toString();
+        } else if (parameterType == JsonObject.class) {
+            return body instanceof JsonObject jsonObject ? jsonObject : new JsonObject(body.toString());
+        } else if (parameterType == JsonArray.class) {
+            return body instanceof JsonArray jsonArray ? jsonArray : new JsonArray(body.toString());
+        } else if (parameterType == Integer.class || parameterType == int.class) {
+            return Integer.parseInt(body.toString());
+        } else if (parameterType == Long.class || parameterType == long.class) {
+            return Long.parseLong(body.toString());
+        } else if (parameterType == Double.class || parameterType == double.class) {
+            return Double.parseDouble(body.toString());
+        } else if (parameterType == Boolean.class || parameterType == boolean.class) {
+            return Boolean.parseBoolean(body.toString());
+        } else if (parameterType == Buffer.class) {
+            return body instanceof Buffer buffer ? buffer : Buffer.buffer(body.toString());
+        } else if (!parameterType.isPrimitive() && !parameterType.isArray()) {
+            try {
+                return new JsonMapper().readValue(body.toString(), parameterType);
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Failed to convert body to " + parameterType.getName(), e);
+            }
+        }
 
-    Parameter[] parameters = method.getParameters();
-
-    for (int i = 0; i < parameterNames.length; i++) {
-      Parameter parameter = parameters[i];
-
-      if (parameter.getAnnotation(BodyParam.class) != null) {
-        result.add(convertBody(parameterTypes[i], body));
-      } else if (parameter.getAnnotation(UploadsParam.class) != null) {
-         result.add(ctx.fileUploads());
-      } else {
-        result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters));
-      }
-    }
-
-    return result.toArray(new Object[0]);
-  }
-
-  private static Object convertBody(Class<?> parameterType, Object body) {
-    if (body == null) {
-      return null;
+        throw new IllegalArgumentException("Unsupported body type: " + parameterType);
     }
 
-    if (parameterType == String.class) {
-      return body.toString();
-    } else if (parameterType == JsonObject.class) {
-      return body instanceof JsonObject jsonObject ? jsonObject : new JsonObject(body.toString());
-    } else if (parameterType == JsonArray.class) {
-      return body instanceof JsonArray jsonArray ? jsonArray : new JsonArray(body.toString());
-    } else if (parameterType == Integer.class || parameterType == int.class) {
-      return Integer.parseInt(body.toString());
-    } else if (parameterType == Long.class || parameterType == long.class) {
-      return Long.parseLong(body.toString());
-    } else if (parameterType == Double.class || parameterType == double.class) {
-      return Double.parseDouble(body.toString());
-    } else if (parameterType == Boolean.class || parameterType == boolean.class) {
-      return Boolean.parseBoolean(body.toString());
-    } else if (parameterType == Buffer.class) {
-      return body instanceof Buffer buffer ? buffer : Buffer.buffer(body.toString());
-    } else if (!parameterType.isPrimitive() && !parameterType.isArray()) {
-      try {
-        return new JsonMapper().readValue(body.toString(), parameterType);
-      } catch (Exception e) {
-        throw new IllegalArgumentException("Failed to convert body to " + parameterType.getName(), e);
-      }
+    private static Object convertValue(String parameterName, Class<?> parameterType, MultiMap parameters) {
+        String value = parameters.get(parameterName);
+        if (parameterType == Integer.class || parameterType == int.class)
+            return value != null ? Integer.parseInt(value) : 0;
+        if (parameterType == Short.class || parameterType == short.class)
+            return value != null ? Short.valueOf(value) : 0;
+        if (parameterType == Byte.class || parameterType == byte.class)
+            return value != null ? Byte.valueOf(value) : 0;
+        if (parameterType == Boolean.class || parameterType == boolean.class)
+            return Boolean.valueOf(value);
+        else if (parameterType == Double.class || parameterType == double.class)
+            return value != null ? Double.parseDouble(value) : 0;
+        else if (parameterType == Float.class || parameterType == float.class)
+            return value != null ? Float.parseFloat(value) : 0;
+        else
+            return value;
     }
 
-    throw new IllegalArgumentException("Unsupported body type: " + parameterType);
-  }
-
-  private static Object convertValue(String parameterName, Class<?> parameterType, MultiMap parameters) {
-    String value = parameters.get(parameterName);
-    if (parameterType == Integer.class || parameterType == int.class)
-      return value != null ? Integer.parseInt(value) : 0;
-    if (parameterType == Short.class || parameterType == short.class)
-      return value != null ? Short.valueOf(value) : 0;
-    if (parameterType == Byte.class || parameterType == byte.class)
-      return value != null ? Byte.valueOf(value) : 0;
-    if (parameterType == Boolean.class || parameterType == boolean.class)
-      return Boolean.valueOf(value);
-    else if (parameterType == Double.class || parameterType == double.class)
-      return value != null ? Double.parseDouble(value) : 0;
-    else if (parameterType == Float.class || parameterType == float.class)
-      return value != null ? Float.parseFloat(value) : 0;
-    else
-      return value;
-  }
-
-  @SuppressWarnings({"rawtypes", "unchecked"})
-  private static void processHandlerResult(Method method, RoutingContext ctx, Object result) {
-    if (method.getReturnType() == void.class) {
-      handleVoidResult(ctx);
-    } else if (result == null) {
-      handleNullResult(ctx);
-    } else {
-      if (result instanceof HandlerResult<?> handlerResult) {
-        handlerResult.handle(ctx);
-      } else {
-        new HandlerResult(result).handle(ctx);
-      }
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void processHandlerResult(Method method, RoutingContext ctx, Object result) {
+        if (method.getReturnType() == void.class) {
+            handleVoidResult(ctx);
+        } else if (result == null) {
+            handleNullResult(ctx);
+        } else {
+            if (result instanceof HandlerResult<?> handlerResult) {
+                handlerResult.handle(ctx);
+            } else {
+                new HandlerResult(result).handle(ctx);
+            }
+        }
     }
-  }
 
-  private static void handleVoidResult(RoutingContext ctx) {
-    ctx.end();
-  }
+    private static void handleVoidResult(RoutingContext ctx) {
+        ctx.end();
+    }
 
-  private static void handleNullResult(RoutingContext ctx) {
-    ctx.response().setStatusCode(204).end();
-  }
+    private static void handleNullResult(RoutingContext ctx) {
+        ctx.response().setStatusCode(204).end();
+    }
 }

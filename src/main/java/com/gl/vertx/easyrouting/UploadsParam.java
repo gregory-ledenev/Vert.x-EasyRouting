@@ -30,8 +30,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * This annotation binds a parameter that is a receiver for uploaded files. Filed type must be
- * {@link java.util.List} of {@link io.vertx.ext.web.FileUpload} to function properly.
+ * This annotation binds a parameter that is a receiver for uploaded files. Filed type must be {@link java.util.List} of
+ * {@link io.vertx.ext.web.FileUpload} to function properly.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.PARAMETER)

@@ -30,67 +30,67 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Contains annotations for HTTP methods used in routing handlers.
- * These annotations are used to mark methods that handle specific HTTP requests.
+ * Contains annotations for HTTP methods used in routing handlers. These annotations are used to mark methods that
+ * handle specific HTTP requests.
  */
 public class HttpMethods {
-  @Retention(RetentionPolicy.RUNTIME)
-  @Target(ElementType.METHOD)
-  /**
-   * Marks a method as handling HTTP GET requests.
-   */
-  public @interface GET {
-      /**
-       * @return the path pattern for this GET endpoint
-       */
-      String value();
-  }
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.METHOD)
+    /**
+     * Marks a method as handling HTTP GET requests.
+     */
+    public @interface GET {
+        /**
+         * @return the path pattern for this GET endpoint
+         */
+        String value();
+    }
 
-  @Retention(RetentionPolicy.RUNTIME)
-  @Target(ElementType.METHOD)
-  /**
-   * Marks a method as handling HTTP POST requests.
-   */
-  public @interface POST {
-      /**
-       * @return the path pattern for this POST endpoint
-       */
-      String value();
-  }
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.METHOD)
+    /**
+     * Marks a method as handling HTTP POST requests.
+     */
+    public @interface POST {
+        /**
+         * @return the path pattern for this POST endpoint
+         */
+        String value();
+    }
 
-  @Retention(RetentionPolicy.RUNTIME)
-  @Target(ElementType.METHOD)
-  /**
-   * Marks a method as handling HTTP DELETE requests.
-   */
-  public @interface DELETE {
-      /**
-       * @return the path pattern for this DELETE endpoint
-       */
-      String value();
-  }
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.METHOD)
+    /**
+     * Marks a method as handling HTTP DELETE requests.
+     */
+    public @interface DELETE {
+        /**
+         * @return the path pattern for this DELETE endpoint
+         */
+        String value();
+    }
 
-  @Retention(RetentionPolicy.RUNTIME)
-  @Target(ElementType.METHOD)
-  /**
-   * Marks a method as handling HTTP PUT requests.
-   */
-  public @interface PUT {
-      /**
-       * @return the path pattern for this PUT endpoint
-       */
-      String value();
-  }
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.METHOD)
+    /**
+     * Marks a method as handling HTTP PUT requests.
+     */
+    public @interface PUT {
+        /**
+         * @return the path pattern for this PUT endpoint
+         */
+        String value();
+    }
 
-  @Retention(RetentionPolicy.RUNTIME)
-  @Target(ElementType.METHOD)
-  /**
-   * Marks a method as handling HTTP PATCH requests.
-   */
-  public @interface PATCH {
-      /**
-       * @return the path pattern for this PATCH endpoint
-       */
-      String value();
-  }
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.METHOD)
+    /**
+     * Marks a method as handling HTTP PATCH requests.
+     */
+    public @interface PATCH {
+        /**
+         * @return the path pattern for this PATCH endpoint
+         */
+        String value();
+    }
 }

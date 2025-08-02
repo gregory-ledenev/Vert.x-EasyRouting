@@ -45,9 +45,8 @@ import java.util.Map;
 import static com.gl.vertx.easyrouting.EasyRouting.REDIRECT;
 
 /**
- * Represents a result of a handler method execution in the routing system.
- * This class wraps various types of responses and provides unified handling
- * for different return types, including files, JSON, collections, and primitive types.
+ * Represents a result of a handler method execution in the routing system. This class wraps various types of responses
+ * and provides unified handling for different return types, including files, JSON, collections, and primitive types.
  *
  * @param <T> The type of the result value
  */
@@ -251,8 +250,7 @@ public class HandlerResult<T> {
             }
         } catch (HttpException e) {
             ctx.response().setStatusCode(e.getStatusCode()).end(e.getMessage());
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             ctx.response().setStatusCode(500).end();
         }
     }

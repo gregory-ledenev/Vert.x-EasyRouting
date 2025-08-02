@@ -71,6 +71,9 @@ public class TestEasyRouting {
     public static final int PORT = 8080;
     public static final String HOST = "localhost";
 
+    record User(String id, String name) {
+    }
+
     static class TestVerticle extends AbstractVerticle {
 
         public static final String HTML = """
@@ -140,6 +143,12 @@ public class TestEasyRouting {
         @GET("/greeting/*")
         public String getGreeting() {
             return "Greeting!!!";
+        }
+
+        @HttpMethods.GET("/users/:id")
+        public User getUser(@Param("id") String userId) {
+            // Return user by ID
+            return new User(userId, "John Doe");
         }
 
         private void createHttpServer(Promise<Void> startPromise, Router router) {
