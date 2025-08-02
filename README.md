@@ -79,6 +79,67 @@ public class Application {
 }
 ```
 
+## Adding and Configuring Handler Methods
+
+To create handler methods in your controller classes:
+
+1. **Create a method with an HTTP method annotation** - Use one of the following annotations to define the HTTP method and path:
+   - `@HttpMethods.GET(path)` - For HTTP GET requests
+   - `@HttpMethods.POST(path)` - For HTTP POST requests
+   - `@HttpMethods.PUT(path)` - For HTTP PUT requests
+   - `@HttpMethods.DELETE(path)` - For HTTP DELETE requests
+   - `@HttpMethods.PATCH(path)` - For HTTP PATCH requests
+
+2. **Define path parameters** - Use `:paramName` syntax in your path to define path parameters:
+   ```java
+   @HttpMethods.GET("/users/:id")
+   public User getUser(@Param("id") int userId) {
+       // ...
+   }
+   ```
+
+3. **Bind request parameters** - Use the `@Param` annotation to bind URL/query parameters to method arguments:
+   ```java
+   @HttpMethods.GET("/users/search")
+   public List<User> searchUsers(@Param("name") String name, @Param("age") Integer age) {
+       // Access query parameters like /users/search?name=John&age=30
+   }
+   ```
+4. **Bind optional request parameters** - Use the `@OptionalParam` annotation to bind optional URL/query parameters to method arguments:
+   ```java
+   @HttpMethods.GET("/users/search")
+   public List<User> searchUsers(@Param("name") String name, @OptionalParam("age") Integer age) {
+       // Access query parameters like /users/search?name=John&age=30
+   }
+   ```
+
+5. **Access request body** - Use the `@BodyParam` annotation to bind JSON body content to method arguments:
+   ```java
+   @HttpMethods.POST("/users")
+   public User createUser(@BodyParam("user") User user) {
+       // Automatically converts JSON to User object
+   }
+   ```
+
+8. **Handle file uploads** - Use the `@UploadsParam` annotation to bind a list of uploaded files to method arguments:
+```java
+   @POST("/files/uploadFile")
+   public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @UploadsParam List<FileUpload> fileUploads) {
+      return HandlerResult.saveFiles("files", fileUploads, "redirect:/");
+   }
+```
+
+7. **Return values** - Handler methods can return various types which are automatically processed:
+   - Java objects (automatically converted to JSON)
+   - Lists/arrays (automatically converted to JSON arrays)
+   - Primitives or Strings (sent as response)
+   - `void` (for operations without explicit returns)
+
+8. **Register your controllers** - After defining your handler methods, register the controller instance with EasyRouting:
+   ```java
+   EasyRouting.setupHandlers(router, controllerInstance);
+   ```
+
 ## Adding to Your Build
 
 To add to your build: copy `com.gl.vertx.easyrouting` classes to your Vert.x project.
