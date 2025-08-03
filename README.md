@@ -145,7 +145,7 @@ public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @Upl
     return HandlerResult.saveFiles("files", fileUploads, "redirect:/");
 }
 ```
-7. **Handle form submissions** - Use the `@FormParam` annotation to bind form
+7. **Handle form submissions** - Use the `@Form` annotation to bind form
    fields to method arguments:
 ```java
 @Form
@@ -234,6 +234,7 @@ EasyRouting supports error handling by binding HTTP error codes to handler metho
 ```java
 @StatusCode(401)
 @GET("/loginForm")
+public String loginForm(@OptionalParam("redirect") String redirect) {
     ...
 }
 ```
