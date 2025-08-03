@@ -18,7 +18,7 @@ implementation without attempting to replicate SpringBoot's entire feature set.
 - JSON object/array conversion
 - Automatic response processing
 - Redirect handling
-- Built JWT authentication and role-based authorization
+- Builtin JWT authentication and role-based authorization
 - Binding methods to HTTP error codes
 
 ## Basic Usage
