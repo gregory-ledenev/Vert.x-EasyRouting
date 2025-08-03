@@ -39,10 +39,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.text.MessageFormat;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 
 /**
@@ -62,6 +59,9 @@ public class EasyRouting {
      * @param target the object containing annotated handler methods
      */
     public static void setupHandlers(Router router, Object target) {
+        Objects.requireNonNull(router);
+        Objects.requireNonNull(target);
+
         setupHandlers(router, HttpMethods.GET.class, target);
         setupHandlers(router, HttpMethods.POST.class, target);
         setupHandlers(router, HttpMethods.DELETE.class, target);

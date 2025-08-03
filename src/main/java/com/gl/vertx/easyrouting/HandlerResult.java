@@ -37,10 +37,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.text.MessageFormat;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static com.gl.vertx.easyrouting.EasyRouting.REDIRECT;
 
@@ -63,6 +60,9 @@ public class HandlerResult<T> {
      * @return HandlerResult configured for file download
      */
     public static HandlerResult<Buffer> file(Buffer buffer, String fileName) {
+        Objects.requireNonNull(buffer);
+        Objects.requireNonNull(fileName);
+
         getMimeType(fileName);
         return new HandlerResult<>(buffer, Map.of(
                 "Content-Type", "application/octet-stream",
@@ -77,6 +77,8 @@ public class HandlerResult<T> {
      * @return HandlerResult configured for HTML response
      */
     public static HandlerResult<String> html(String html) {
+        Objects.requireNonNull(html);
+
         return new HandlerResult<String>(html,
                 Map.of("content-type", "text/html"));
     }
@@ -90,6 +92,9 @@ public class HandlerResult<T> {
      * @return HandlerResult configured for file saving and redirect
      */
     public static HandlerResult<String> saveFiles(String folder, List<FileUpload> fileUploads, String redirect) {
+        Objects.requireNonNull(folder);
+        Objects.requireNonNull(fileUploads);
+
         return new HandlerResult<>(redirect) {
 
             @Override
@@ -119,6 +124,13 @@ public class HandlerResult<T> {
         return new HandlerResult<>(filePath);
     }
 
+
+    /**
+     * Determines the MIME type of file based on its name.
+     * If the MIME type cannot be determined, it defaults to "application/octet-stream".
+     *
+     * @param fileName The name of the file
+     */
     public static void getMimeType(String fileName) {
         FileNameMap fileNameMap = URLConnection.getFileNameMap();
         String mimeType = fileNameMap.getContentTypeFor(fileName);
@@ -145,7 +157,8 @@ public class HandlerResult<T> {
      */
     public HandlerResult(T result, Map<String, String> headers, int statusCode) {
         this.result = result;
-        this.headers = headers;
+        if (headers != null)
+            this.headers = headers;
         this.statusCode = statusCode;
     }
 
