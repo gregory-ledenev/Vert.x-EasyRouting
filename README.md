@@ -65,6 +65,9 @@ public class Application {
         Vertx vertx = Vertx.vertx();
         Router router = Router.router(vertx);
         
+        // Enable body handling for parsing request bodies
+        router.route().handler(BodyHandler.create());
+        
         // Create controller instance
         UserController userController = new UserController();
         
