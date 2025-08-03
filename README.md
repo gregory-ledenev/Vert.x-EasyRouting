@@ -1,18 +1,25 @@
 # EasyRouting for Vert.x
 
-EasyRouting is an experimental lightweight annotation-based HTTP routing library for Vert.x web applications. It
-simplifies route configuration by allowing developers to define routes using annotations and automatically handles
-parameter binding and response processing. While inspired by SpringBoot's annotation-based routing patterns, it maintains a focused, lightweight implementation without attempting to replicate SpringBoot's entire feature set.
+EasyRouting is an experimental lightweight annotation-based HTTP routing library
+for Vert.x web applications. It simplifies route configuration by allowing
+developers to define routes using annotations and automatically handles
+parameter binding and response processing. While inspired by SpringBoot's
+annotation-based routing patterns, it maintains a focused, lightweight
+implementation without attempting to replicate SpringBoot's entire feature set.
 
 ## Key Features
 
-- Annotation-based route definitions for all common HTTP methods (GET, POST, PUT, DELETE, PATCH)
+- Annotation-based route definitions for all common HTTP methods (GET, POST,
+  PUT, DELETE, PATCH)
 - Automatic parameter binding from request parameters and body
+- Form handling
 - Support for optional parameters
 - File upload/download handling
 - JSON object/array conversion
 - Automatic response processing
 - Redirect handling
+- Built JWT authentication and role-based authorization
+- Binding methods to HTTP error codes
 
 ## Basic Usage
 
@@ -86,14 +93,16 @@ public class Application {
 
 To create handler methods in your controller classes:
 
-1. **Create a method with an HTTP method annotation** - Use one of the following annotations to define the HTTP method and path:
-   - `@HttpMethods.GET(path)` - For HTTP GET requests
-   - `@HttpMethods.POST(path)` - For HTTP POST requests
-   - `@HttpMethods.PUT(path)` - For HTTP PUT requests
-   - `@HttpMethods.DELETE(path)` - For HTTP DELETE requests
-   - `@HttpMethods.PATCH(path)` - For HTTP PATCH requests
+1. **Create a method with an HTTP method annotation** - Use one of the following
+   annotations to define the HTTP method and path:
+    - `@HttpMethods.GET(path)` - For HTTP GET requests
+    - `@HttpMethods.POST(path)` - For HTTP POST requests
+    - `@HttpMethods.PUT(path)` - For HTTP PUT requests
+    - `@HttpMethods.DELETE(path)` - For HTTP DELETE requests
+    - `@HttpMethods.PATCH(path)` - For HTTP PATCH requests
 
-2. **Define path parameters** - Use `:paramName` syntax in your path to define path parameters:
+2. **Define path parameters** - Use `:paramName` syntax in your path to define
+   path parameters:
    ```java
    @HttpMethods.GET("/users/:id")
    public User getUser(@Param("id") int userId) {
@@ -101,14 +110,16 @@ To create handler methods in your controller classes:
    }
    ```
 
-3. **Bind request parameters** - Use the `@Param` annotation to bind URL/query parameters to method arguments:
+3. **Bind request parameters** - Use the `@Param` annotation to bind URL/query
+   parameters to method arguments:
    ```java
    @HttpMethods.GET("/users/search")
    public List<User> searchUsers(@Param("name") String name, @Param("age") Integer age) {
        // Access query parameters like /users/search?name=John&age=30
    }
    ```
-4. **Bind optional request parameters** - Use the `@OptionalParam` annotation to bind optional URL/query parameters to method arguments:
+4. **Bind optional request parameters** - Use the `@OptionalParam` annotation to
+   bind optional URL/query parameters to method arguments:
    ```java
    @HttpMethods.GET("/users/search")
    public List<User> searchUsers(@Param("name") String name, @OptionalParam("age") Integer age) {
@@ -116,7 +127,8 @@ To create handler methods in your controller classes:
    }
    ```
 
-5. **Access request body** - Use the `@BodyParam` annotation to bind JSON body content to method arguments:
+5. **Access request body** - Use the `@BodyParam` annotation to bind JSON body
+   content to method arguments:
    ```java
    @HttpMethods.POST("/users")
    public User createUser(@BodyParam("user") User user) {
@@ -124,27 +136,42 @@ To create handler methods in your controller classes:
    }
    ```
 
-8. **Handle file uploads** - Use the `@UploadsParam` annotation to bind a list of uploaded files to method arguments:
+6. **Handle file uploads** - Use the `@UploadsParam` annotation to bind a list
+   of uploaded files to method arguments:
+
 ```java
-   @POST("/files/uploadFile")
-   public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @UploadsParam List<FileUpload> fileUploads) {
-      return HandlerResult.saveFiles("files", fileUploads, "redirect:/");
-   }
+@POST("/files/uploadFile")
+public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @UploadsParam List<FileUpload> fileUploads) {
+    return HandlerResult.saveFiles("files", fileUploads, "redirect:/");
+}
+```
+7. **Handle form submissions** - Use the `@FormParam` annotation to bind form
+   fields to method arguments:
+```java
+@Form
+@GET("/loginForm")
+String loginForm(@Param("user") String user, @Param("password") String password) {
+    ...
+}
 ```
 
-7. **Return values** - Handler methods can return various types which are automatically processed:
-   - Java objects (automatically converted to JSON)
-   - Lists/arrays (automatically converted to JSON arrays)
-   - Primitives or Strings (sent as response)
-   - `void` (for operations without explicit returns)
+8. **Return values** - Handler methods can return various types which are
+   automatically processed:
+    - Java objects (automatically converted to JSON)
+    - Lists/arrays (automatically converted to JSON arrays)
+    - Primitives or Strings (sent as response)
+    - `void` (for operations without explicit returns)
 
-8. **Register your controllers** - After defining your handler methods, register the controller instance with EasyRouting:
+9. **Register your controllers** - After defining your handler methods, register
+   the controller instance with EasyRouting:
    ```java
    EasyRouting.setupHandlers(router, controllerInstance);
    ```
+
 ## Using EasyRouting Application for Testing and Prototyping
 
-There is a special Application class that allows building minimal applications for prototyping and testing purposes 
+There is a special Application class that allows building minimal applications
+for prototyping and testing purposes
 without having to create a full Vert.x application.
 
 ``` java
@@ -181,11 +208,42 @@ class TestApplication extends Application {
     }
 }
 ```
+## JWT Support
+
+EasyRouting supports JWT authentication and role-based authorization. To apply it to a router - use 
+`EasyRouting.applyJwtAuth()` method:
+
+```java
+EasyRouting.applyJWTAuth(vertx, router, "/api/", <SECRET KEY>);
+```
+
+You may authorize certain methods to be accessed only by certain roles by specifying them as `requiredRoles` in the 
+`@GET`, `@POST` etc. annotations:
+
+```java
+@HttpMethods.GET("/users/:id", requiredRoles = {"admin"})
+public User getUser(@Param("id") int userId) {
+    // ...
+}
+```
+
+## Error Handling
+
+EasyRouting supports error handling by binding HTTP error codes to handler methods using `@StatusCode` annotations:
+
+```java
+@StatusCode(401)
+@GET("/loginForm")
+    ...
+}
+```
 
 ## Adding to Your Build
 
-To add to your build: copy `com.gl.vertx.easyrouting` classes to your Vert.x project.
+To add to your build: copy `com.gl.vertx.easyrouting` classes to your Vert.x
+project.
 
 ## License
 
-The Vert.x-EasyRouting is licensed under the terms of the [MIT License](https://opensource.org/license/mit).
+The Vert.x-EasyRouting is licensed under the terms of
+the [MIT License](https://opensource.org/license/mit).

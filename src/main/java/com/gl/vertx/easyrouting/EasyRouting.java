@@ -27,20 +27,27 @@ package com.gl.vertx.easyrouting;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
+import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.Route;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.HttpException;
 import org.slf4j.LoggerFactory;
 
+import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.util.*;
 
+import static com.gl.vertx.easyrouting.JWTUtil.ROLES;
 
 /**
  * EasyRouting provides annotation-based HTTP request handling for Vert.x web applications. It simplifies route
@@ -67,6 +74,73 @@ public class EasyRouting {
         setupHandlers(router, HttpMethods.DELETE.class, target);
         setupHandlers(router, HttpMethods.PUT.class, target);
         setupHandlers(router, HttpMethods.PATCH.class, target);
+
+        setupFailureHandler(router, target);
+    }
+
+    /**
+     * Applies JWT authentication with common "HS256" algorithm to a specified route in the given router.
+     * Sample use would be as simple as:<br><br>
+     * {@code JWTUtil.applyAuth(vertx, router, "/api/*", "very long password");}
+     * <br><br>
+     * that applies JWT authentication to all routes
+     * starting with "/api/".
+     *
+     * @param vertx      the Vert.x instance
+     * @param router     the router to which the route will be added
+     * @param path       the path for which JWT authentication should be applied
+     * @param jwtSecret  the secret key used for signing JWT tokens. It can be a plain password or a string in PEM format
+     * @return the created route with JWT authentication applied
+     */
+    public static Route applyJWTAuth(Vertx vertx, Router router,
+                                     String path,
+                                     String jwtSecret) {
+        return JWTUtil.applyAuth(vertx, router, path, jwtSecret);
+    }
+
+    private static void setupFailureHandler(Router router, Object target) {
+        router.route().failureHandler(ctx -> {
+            Throwable failure = ctx.failure();
+            if (failure instanceof HttpException httpEx) {
+                String redirect = redirect(httpEx.getStatusCode(), target);
+                if (redirect != null) {
+                    String originalUri = ctx.request().uri();
+                    ctx.redirect(redirect + "?redirect=" + URLEncoder.encode(originalUri, StandardCharsets.UTF_8));
+                    return;
+                } else if (httpEx.getStatusCode() == 401) {
+                    ctx.response()
+                            .setStatusCode(401)
+                            .end("Unauthorized access to: " + ctx.normalizedPath() + " Error: " + httpEx.getMessage());
+                    return;
+                }
+            }
+            ctx.next();
+        });
+    }
+
+    private static String redirect(int statusCode, Object target) {
+        String result = null;
+
+        all:
+        for (Method method : target.getClass().getDeclaredMethods()) {
+            StatusCode statusCodeAnnotation = method.getAnnotation(StatusCode.class);
+            if (statusCodeAnnotation != null && statusCodeAnnotation.value() == statusCode) {
+                // Get supported HTTP method annotation (GET, POST etc)
+                for (Class<? extends Annotation> httpMethod : Arrays.asList(HttpMethods.GET.class, HttpMethods.POST.class, HttpMethods.DELETE.class, HttpMethods.PUT.class, HttpMethods.PATCH.class)) {
+                    Annotation methodAnnotation = method.getAnnotation(httpMethod);
+                    if (methodAnnotation != null) {
+                        try {
+                            result = (String) methodAnnotation.annotationType().getMethod("value").invoke(methodAnnotation);
+                        } catch (Exception e) {
+                            LoggerFactory.getLogger(target.getClass()).error("Failed to get redirect path for method: " + methodAnnotation, e);
+                            break all;
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     private static List<Method> listHandlerMethods(Class<? extends Annotation> annotationClass, Object target) {
@@ -199,13 +273,32 @@ public class EasyRouting {
         }
     }
 
+    private static boolean checkRequiredRoles(RoutingContext ctx, Method method) {
+        boolean result = true;
+
+        String[] requiredRoles = HttpMethods.requiredRoles(method);
+        if (requiredRoles.length > 0 && ctx.user() != null) {
+            JsonArray rolesArray = ctx.user().principal().getJsonArray(ROLES, new JsonArray());
+            for (String requiredRole : requiredRoles) {
+                if (!rolesArray.contains(requiredRole)) {
+                    result = false;
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
     private static Handler<RoutingContext> createHandler(Annotation annotation, Object target) {
         return ctx -> {
             try {
-                MethodResult handlerMethod = getMethod(annotation, ctx.request().params(), target);
+                MethodResult handlerMethod = getMethod(annotation,
+                        ctx.request().params(),
+                        ctx.request().method() == HttpMethod.POST ? ctx.request().formAttributes() : null,
+                        target);
                 if (handlerMethod == null) {
-                    ctx.response().setStatusCode(404).end("No handler method for annotation: \"" + annotation + "\" and parameters: " + ctx.request().params());
-                } else {
+                    ctx.response().setStatusCode(404).end("No handler method for: \"" + annotation + "\" and parameters: " + ctx.request().params());
+                } else if (checkRequiredRoles(ctx, handlerMethod.method)) {
                     if (handlerMethod.hasBodyParam) {
                         // Use the already parsed body instead of reading it again
                         Buffer bodyBuffer = ctx.getBody();
@@ -225,6 +318,8 @@ public class EasyRouting {
                         Object result = handlerMethod.method().invoke(target, args);
                         processHandlerResult(handlerMethod.method(), ctx, result);
                     }
+                } else {
+                    ctx.response().setStatusCode(403).end("Forbidden");
                 }
             } catch (HttpException e) {
                 ctx.response().setStatusCode(e.getStatusCode()).end(e.getPayload());
@@ -247,10 +342,16 @@ public class EasyRouting {
     record MethodResult(Method method, String[] parameterNames, boolean hasBodyParam) {
     }
 
-    private static MethodResult getMethod(Annotation annotation, MultiMap parameters, Object target) {
+    private static MethodResult getMethod(Annotation annotation,
+                                          MultiMap parameters,
+                                          MultiMap formAttributes,
+                                          Object target) {
         MultiMap lowercaseParams = MultiMap.caseInsensitiveMultiMap();
-        parameters.forEach(entry -> lowercaseParams.add(entry.getKey().toLowerCase(), entry.getValue()));
-        parameters = lowercaseParams;
+        lowercaseParams.addAll(parameters);
+
+        MultiMap lowercaseFormAttributes = formAttributes != null ? MultiMap.caseInsensitiveMultiMap() : null;
+        if (lowercaseFormAttributes != null)
+            lowercaseFormAttributes.addAll(formAttributes);
 
         for (Method method : target.getClass().getDeclaredMethods()) {
             Annotation methodAnnotation = method.getAnnotation(annotation.annotationType());
@@ -260,6 +361,7 @@ public class EasyRouting {
                 int optionalParamCount = 0;
                 int otherParamCount = 0;
                 boolean hasBodyParam = false;
+                boolean isFormHandler = method.getAnnotation(Form.class) != null;
 
                 Annotation[][] parameterAnnotations = method.getParameterAnnotations();
                 for (Annotation[] annotations : parameterAnnotations) {
@@ -268,13 +370,19 @@ public class EasyRouting {
                     Annotation paramAnnotation = annotations[0];
                     if (paramAnnotation instanceof Param param) {
                         paramNames.add(param.value());
-                        if (lowercaseParams.get(param.value().toLowerCase()) != null)
+                        String lowerCaseParam = param.value().toLowerCase();
+                        if (lowercaseParams.get(lowerCaseParam) != null)
                             matchedParamCount++;
+                        else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
+                            otherParamCount++;
                     } else if (paramAnnotation instanceof OptionalParam param) {
                         paramNames.add(param.value());
                         matchedParamCount++;
-                        if (lowercaseParams.get(param.value().toLowerCase()) == null)
+                        String lowerCaseParam = param.value().toLowerCase();
+                        if (lowercaseParams.get(lowerCaseParam) == null)
                             optionalParamCount++;
+                        else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
+                            otherParamCount++;
                     } else if (paramAnnotation instanceof BodyParam param) {
                         otherParamCount++;
                         hasBodyParam = true;

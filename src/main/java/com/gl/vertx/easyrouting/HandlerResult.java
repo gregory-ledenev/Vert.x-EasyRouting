@@ -239,7 +239,7 @@ public class HandlerResult<T> {
                 ctx.response().putHeader("content-type", "application/octet-stream");
                 ctx.response().putHeader("content-disposition", MessageFormat.format("attachment; filename=\"{0}\"", filePath.getFileName().toString()));
                 ctx.response().sendFile(filePath.toString())
-                        .onSuccess(v -> ctx.response().end())
+                        .onSuccess(v -> ctx.response())
                         .onFailure(ctx::fail);
             } else if (result instanceof Buffer buffer) {
                 ctx.response().putHeader("content-type", "application/octet-stream");

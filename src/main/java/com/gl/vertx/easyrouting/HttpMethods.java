@@ -24,73 +24,113 @@ SOFTWARE.
 
 package com.gl.vertx.easyrouting;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.lang.annotation.*;
+import java.lang.reflect.Method;
 
 /**
  * Contains annotations for HTTP methods used in routing handlers. These annotations are used to mark methods that
  * handle specific HTTP requests.
  */
 public class HttpMethods {
-    @Retention(RetentionPolicy.RUNTIME)
-    @Target(ElementType.METHOD)
     /**
      * Marks a method as handling HTTP GET requests.
      */
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.METHOD)
     public @interface GET {
         /**
          * @return the path pattern for this GET endpoint
          */
         String value();
+        /**
+         * @return the roles required to access this endpoint
+         */
+        String[] requiredRoles() default {};
     }
 
-    @Retention(RetentionPolicy.RUNTIME)
-    @Target(ElementType.METHOD)
     /**
      * Marks a method as handling HTTP POST requests.
      */
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.METHOD)
     public @interface POST {
         /**
          * @return the path pattern for this POST endpoint
          */
         String value();
+        /**
+         * @return the roles required to access this endpoint
+         */
+        String[] requiredRoles() default {};
     }
 
-    @Retention(RetentionPolicy.RUNTIME)
-    @Target(ElementType.METHOD)
     /**
      * Marks a method as handling HTTP DELETE requests.
      */
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.METHOD)
     public @interface DELETE {
         /**
          * @return the path pattern for this DELETE endpoint
          */
         String value();
+        /**
+         * @return the roles required to access this endpoint
+         */
+        String[] requiredRoles() default {};
     }
 
-    @Retention(RetentionPolicy.RUNTIME)
-    @Target(ElementType.METHOD)
     /**
      * Marks a method as handling HTTP PUT requests.
      */
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.METHOD)
     public @interface PUT {
         /**
          * @return the path pattern for this PUT endpoint
          */
         String value();
+        /**
+         * @return the roles required to access this endpoint
+         */
+        String[] requiredRoles() default {};
+
     }
 
-    @Retention(RetentionPolicy.RUNTIME)
-    @Target(ElementType.METHOD)
     /**
      * Marks a method as handling HTTP PATCH requests.
      */
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.METHOD)
     public @interface PATCH {
         /**
          * @return the path pattern for this PATCH endpoint
          */
         String value();
+        /**
+         * @return the roles required to access this endpoint
+         */
+        String[] requiredRoles() default {};
     }
+
+    /**
+     * Gets the required roles for a method.
+     * @param method the method to get roles for
+     * @return the required roles for the method
+     */
+    public static String[] requiredRoles(Method method) {
+        try {
+            for (Annotation annotation : method.getAnnotations()) {
+                if (annotation instanceof HttpMethods.GET get) return get.requiredRoles();
+                if (annotation instanceof HttpMethods.POST post) return post.requiredRoles();
+                if (annotation instanceof HttpMethods.PUT put) return put.requiredRoles();
+                if (annotation instanceof HttpMethods.DELETE delete) return delete.requiredRoles();
+                if (annotation instanceof HttpMethods.PATCH patch) return patch.requiredRoles();
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to get required roles", e);
+        }
+        return new String[0];
+    }
+
 }
