@@ -142,6 +142,45 @@ To create handler methods in your controller classes:
    ```java
    EasyRouting.setupHandlers(router, controllerInstance);
    ```
+## Using EasyRouting Application for Testing and Prototyping
+
+There is a special Application class that allows building minimal applications for prototyping and testing purposes 
+without having to create a full Vert.x application.
+
+``` java
+class TestApplication extends Application {
+    @GET("/*")
+    String hello() {
+        return "Hello from TestApplication!";
+    }
+
+    public static void main(String[] args) {
+        TestApplication app = new TestApplication().start(8080);
+    }
+}
+```
+
+You may use that application to simplify making your tests:
+
+``` java
+class TestApplication extends Application {
+    @GET("/*")
+    String hello() {
+        return "Hello from TestApplication!";
+    }
+
+    public static void main(String[] args) {
+        TestApplication app = new TestApplication();
+        app.start(8080, app -> {
+            try {
+                // add your testing code here
+            } finally {
+                app.stop();
+            }               
+        });
+    }
+}
+```
 
 ## Adding to Your Build
 
