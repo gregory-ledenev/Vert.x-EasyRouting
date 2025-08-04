@@ -30,6 +30,10 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.FileUpload;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.HttpException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
 
 import java.net.FileNameMap;
 import java.net.URLConnection;
@@ -48,27 +52,10 @@ import static com.gl.vertx.easyrouting.EasyRouting.REDIRECT;
  * @param <T> The type of the result value
  */
 public class HandlerResult<T> {
+    private static final Logger logger = LoggerFactory.getLogger(HandlerResult.class);
     private final T result;
     private Map<String, String> headers = new HashMap<>();
     private int statusCode;
-
-    /**
-     * Creates a HandlerResult for sending a file from a buffer.
-     *
-     * @param buffer   The buffer containing file data
-     * @param fileName The name of the file to be sent
-     * @return HandlerResult configured for file download
-     */
-    public static HandlerResult<Buffer> file(Buffer buffer, String fileName) {
-        Objects.requireNonNull(buffer);
-        Objects.requireNonNull(fileName);
-
-        getMimeType(fileName);
-        return new HandlerResult<>(buffer, Map.of(
-                "Content-Type", "application/octet-stream",
-                "Content-Disposition", MessageFormat.format("attachment; filename=\"{0}\"", fileName)
-        ));
-    }
 
     /**
      * Creates a HandlerResult for sending HTML content.
@@ -81,6 +68,25 @@ public class HandlerResult<T> {
 
         return new HandlerResult<String>(html,
                 Map.of("content-type", "text/html"));
+    }
+
+    /**
+     * Creates a HandlerResult for sending HTML content.
+     *
+     * @param path path to an HTML file to send
+     * @return HandlerResult configured for HTML response
+     */
+    public static HandlerResult<String> html(Path path) {
+        Objects.requireNonNull(path);
+
+        try {
+            String html = Files.readString(path);
+            return new HandlerResult<String>(html,
+                    Map.of("content-type", "text/html"));
+        } catch (IOException e) {
+            logger.error("Failed to read HTML file: " + path, e);
+            return new HandlerResult<String>("Failed to read HTML file: " + path.getFileName().toString(), 500);
+        }
     }
 
     /**
@@ -115,6 +121,24 @@ public class HandlerResult<T> {
     }
 
     /**
+     * Creates a HandlerResult for sending a file from a buffer.
+     *
+     * @param buffer   The buffer containing file data
+     * @param fileName The name of the file to be sent
+     * @return HandlerResult configured for file download
+     */
+    public static HandlerResult<Buffer> file(Buffer buffer, String fileName) {
+        Objects.requireNonNull(buffer);
+        Objects.requireNonNull(fileName);
+
+        ;
+        return new HandlerResult<>(buffer, Map.of(
+                "Content-Type", getMimeType(fileName),
+                "Content-Disposition", MessageFormat.format("attachment; filename=\"{0}\"", fileName)
+        ));
+    }
+
+    /**
      * Creates a HandlerResult for sending a file from a Path.
      *
      * @param filePath The path to the file to be sent
@@ -130,12 +154,15 @@ public class HandlerResult<T> {
      * If the MIME type cannot be determined, it defaults to "application/octet-stream".
      *
      * @param fileName The name of the file
+     * @return The MIME type of the file
      */
-    public static void getMimeType(String fileName) {
+    public static String getMimeType(String fileName) {
         FileNameMap fileNameMap = URLConnection.getFileNameMap();
         String mimeType = fileNameMap.getContentTypeFor(fileName);
         if (mimeType == null)
             mimeType = "application/octet-stream";
+
+        return mimeType;
     }
 
     /**
@@ -235,31 +262,35 @@ public class HandlerResult<T> {
         try {
             headers.forEach(ctx.response()::putHeader);
 
-            if (result instanceof Path filePath) {
-                ctx.response().putHeader("content-type", "application/octet-stream");
-                ctx.response().putHeader("content-disposition", MessageFormat.format("attachment; filename=\"{0}\"", filePath.getFileName().toString()));
-                ctx.response().sendFile(filePath.toString())
-                        .onSuccess(v -> ctx.response())
-                        .onFailure(ctx::fail);
-            } else if (result instanceof Buffer buffer) {
-                ctx.response().putHeader("content-type", "application/octet-stream");
-                ctx.response().send(buffer);
-            } else if (result instanceof JsonObject jsonObject) {
-                sendJsonResponse(ctx, jsonObject.encodePrettily());
-            } else if (result instanceof JsonArray jsonArray) {
-                sendJsonResponse(ctx, jsonArray.encodePrettily());
-            } else if (result instanceof Map<?, ?> map) {
-                handleMapResult(ctx, map);
-            } else if (result instanceof Collection<?> collection) {
-                handleCollectionResult(ctx, collection);
-            } else if (result.getClass().isArray()) {
-                handleArrayResult(ctx, result);
-            } else if (result instanceof Number || result instanceof Boolean) {
-                sendPlainTextResponse(ctx, result.toString());
-            } else if (result instanceof String string) {
-                handleStringResult(ctx, string);
+            if (getStatusCode() == 200) {
+                if (result instanceof Path filePath) {
+                    ctx.response().putHeader("content-type", "application/octet-stream");
+                    ctx.response().putHeader("content-disposition", MessageFormat.format("attachment; filename=\"{0}\"", filePath.getFileName().toString()));
+                    ctx.response().sendFile(filePath.toString())
+                            .onSuccess(v -> ctx.response())
+                            .onFailure(ctx::fail);
+                } else if (result instanceof Buffer buffer) {
+                    ctx.response().putHeader("content-type", "application/octet-stream");
+                    ctx.response().send(buffer);
+                } else if (result instanceof JsonObject jsonObject) {
+                    sendJsonResponse(ctx, jsonObject.encodePrettily());
+                } else if (result instanceof JsonArray jsonArray) {
+                    sendJsonResponse(ctx, jsonArray.encodePrettily());
+                } else if (result instanceof Map<?, ?> map) {
+                    handleMapResult(ctx, map);
+                } else if (result instanceof Collection<?> collection) {
+                    handleCollectionResult(ctx, collection);
+                } else if (result.getClass().isArray()) {
+                    handleArrayResult(ctx, result);
+                } else if (result instanceof Number || result instanceof Boolean) {
+                    sendPlainTextResponse(ctx, result.toString());
+                } else if (result instanceof String string) {
+                    handleStringResult(ctx, string);
+                } else {
+                    handleOtherResult(ctx, result);
+                }
             } else {
-                handleOtherResult(ctx, result);
+                ctx.response().setStatusCode(getStatusCode()).end();
             }
         } catch (HttpException e) {
             ctx.response().setStatusCode(e.getStatusCode()).end(e.getMessage());
@@ -307,7 +338,9 @@ public class HandlerResult<T> {
             ctx.redirect(redirectPath);
         } else {
             if (ctx.response().headers().size() == 0)
-                sendPlainTextResponse(ctx, string);
+                ctx.response()
+                        .putHeader("content-type", "text/html")
+                        .end(string);
             else
                 ctx.response().end(string);
         }

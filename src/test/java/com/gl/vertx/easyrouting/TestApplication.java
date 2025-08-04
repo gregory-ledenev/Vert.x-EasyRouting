@@ -263,4 +263,15 @@ public class TestApplication {
             throw exceptions.get(0);
         }
     }
+
+    static class HelloWorld extends Application {
+        @GET("/*")
+        String hello() {
+            return "Hello World!";
+        }
+
+        public static void main(String[] args) {
+            new HelloWorld().start(8080);
+        }
+    }
 }

@@ -18,6 +18,7 @@ import java.nio.file.StandardCopyOption;
 import java.text.MessageFormat;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import java.io.File;
 import java.util.Arrays;
@@ -135,6 +136,7 @@ public class TestEasyRouting {
             StringBuilder fileList = new StringBuilder();
             if (folder.exists() && folder.isDirectory()) {
                 Arrays.stream(folder.listFiles())
+                        .sorted(Comparator.comparing(File::lastModified))
                         .forEach(file -> fileList.append(MessageFormat.
                                 format("<li><a href=\"/files/serveFile?fileName={0}\">{0}</a> ({1} bytes)</li>\n",
                                         file.getName(), file.length())));
