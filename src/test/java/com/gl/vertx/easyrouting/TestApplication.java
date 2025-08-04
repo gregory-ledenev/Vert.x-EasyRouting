@@ -82,7 +82,7 @@ public class TestApplication {
             } finally {
                 application.stop();
             }
-        });
+        },  (application, throwable) -> exceptions.add(throwable));
         if (exceptions.size() > 0) {
             throw exceptions.get(0);
         }
@@ -114,7 +114,7 @@ public class TestApplication {
             } finally {
                 application.stop();
             }
-        });
+        },  (application, throwable) -> exceptions.add(throwable));
 
         if (exceptions.size() > 0) {
             throw exceptions.get(0);
@@ -143,7 +143,7 @@ public class TestApplication {
             } finally {
                 application.stop();
             }
-        });
+        },  (application, throwable) -> exceptions.add(throwable));
         if (exceptions.size() > 0) {
             throw exceptions.get(0);
         }
@@ -172,7 +172,7 @@ public class TestApplication {
             } finally {
                 application.stop();
             }
-        });
+        },  (application, throwable) -> exceptions.add(throwable));
         if (exceptions.size() > 0) {
             throw exceptions.get(0);
         }
@@ -201,7 +201,7 @@ public class TestApplication {
             } finally {
                 application.stop();
             }
-        });
+        },  (application, throwable) -> exceptions.add(throwable));
         if (exceptions.size() > 0) {
             throw exceptions.get(0);
         }
@@ -230,7 +230,7 @@ public class TestApplication {
             } finally {
                 application.stop();
             }
-        });
+        },  (application, throwable) -> exceptions.add(throwable));
         if (exceptions.size() > 0) {
             throw exceptions.get(0);
         }
@@ -258,7 +258,7 @@ public class TestApplication {
             } finally {
                 application.stop();
             }
-        });
+        },  (application, throwable) -> exceptions.add(throwable));
         if (exceptions.size() > 0) {
             throw exceptions.get(0);
         }

@@ -33,6 +33,7 @@ import io.vertx.ext.web.handler.HttpException;
 
 import java.util.Scanner;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
@@ -47,6 +48,7 @@ public class Application extends AbstractVerticle {
     private Consumer<Application> completionHandler;
     private final String jwtSecret;
     private final String[] jwtRoutes;
+    private BiConsumer<Application, Throwable> failureHandler;
 
     public Application(String jwtSecret, String... jwtRoutes) {
         this.jwtSecret = jwtSecret;
@@ -97,8 +99,20 @@ public class Application extends AbstractVerticle {
      * @param completionHandler a callback function that will be called when the server starts successfully
      */
     public void start(int port, Consumer<Application> completionHandler) {
+        start(port, completionHandler, null);
+    }
+
+    /**
+     * Starts the application on the specified port.
+     * If the application is already running, a warning message will be logged.
+     *
+     * @param port              the port number on which to start the server
+     * @param completionHandler a callback function that will be called when the server starts successfully
+     */
+    public void start(int port, Consumer<Application> completionHandler, BiConsumer<Application, Throwable> failureHandler) {
         if (vertx == null) {
             this.completionHandler = completionHandler;
+            this.failureHandler = failureHandler;
             this.port = port;
             vertx = Vertx.vertx();
             vertx.deployVerticle(this);
@@ -179,15 +193,20 @@ public class Application extends AbstractVerticle {
                     if (result.succeeded()) {
                         logger.info("Application started on port: " + port);
                         startPromise.complete();
-                        if (completionHandler != null)
+                        if (completionHandler != null) {
                             CompletableFuture.supplyAsync(() -> {
                                 completionHandler.accept(this);
                                 return null;
                             });
+                        }
                     } else {
                         logger.severe("Application failed to start on port: " + port + " - " +
                                 result.cause().getMessage());
                         startPromise.fail(result.cause());
+                        if (failureHandler != null) {
+                            failureHandler.accept(this, result.cause());
+                        }
+                        stopWaiting();
                     }
                 });
     }
