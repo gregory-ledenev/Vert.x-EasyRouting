@@ -32,6 +32,7 @@ import io.vertx.ext.web.handler.BodyHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
@@ -54,7 +55,7 @@ import java.util.function.Consumer;
  *     }
  * }</pre>
  */
-public class Application extends AbstractVerticle {
+public class Application {
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private int port;
     private boolean readInput;
@@ -64,6 +65,25 @@ public class Application extends AbstractVerticle {
     private BiConsumer<Application, Throwable> failureHandler;
 
     private Throwable completionHandlerFailure;
+    private ApplicationVerticle applicationVerticle;
+    private Vertx vertx;
+
+    class ApplicationVerticle extends AbstractVerticle {
+        @Override
+        public void start(Promise<Void> startPromise) {
+            Router router = Router.router(vertx);
+
+            router.route().handler(BodyHandler.create());
+
+            if (jwtSecret != null && jwtRoutes != null)
+                for (String jwtRoute : jwtRoutes)
+                    EasyRouting.applyJWTAuth(vertx, router, jwtRoute, jwtSecret);
+
+            EasyRouting.setupHandlers(router, Application.this);
+
+            createHttpServer(startPromise, router, port);
+        }
+    }
 
     public Application(String jwtSecret, String... jwtRoutes) {
         this.jwtSecret = jwtSecret;
@@ -72,27 +92,6 @@ public class Application extends AbstractVerticle {
 
     public Application() {
         this(null, (String[]) null);
-    }
-
-    /**
-     * Initializes and starts the Vert.x HTTP server with configured routes.
-     * This method is called when the verticle is deployed.
-     *
-     * @param startPromise Promise to be completed when the server has started
-     */
-    @Override
-    public void start(Promise<Void> startPromise) {
-        Router router = Router.router(vertx);
-
-        router.route().handler(BodyHandler.create());
-
-        if (jwtSecret != null && jwtRoutes != null)
-            for (String jwtRoute : jwtRoutes)
-                EasyRouting.applyJWTAuth(vertx, router, jwtRoute, jwtSecret);
-
-        EasyRouting.setupHandlers(router, this);
-
-        createHttpServer(startPromise, router, port);
     }
 
     /**
@@ -130,12 +129,13 @@ public class Application extends AbstractVerticle {
      * @param failureHandler    a callback function that will be called when the server fails to start
      */
     public void start(int port, Consumer<Application> completionHandler, BiConsumer<Application, Throwable> failureHandler) {
-        if (vertx == null) {
+        if (applicationVerticle == null) {
             this.completionHandler = completionHandler;
             this.failureHandler = failureHandler;
             this.port = port;
+            applicationVerticle = new ApplicationVerticle();
             vertx = Vertx.vertx();
-            vertx.deployVerticle(this);
+            vertx.deployVerticle(applicationVerticle);
             startWaiting();
         } else {
             logger.warn("Application is already running on port: " + this.port);
@@ -148,17 +148,60 @@ public class Application extends AbstractVerticle {
      */
     public void stop() {
         if (vertx != null) {
+            logger.info("Application stopping...");
             vertx.close().onComplete(result -> {
-                logger.info("Application stopped");
                 stopWaiting();
+                synchronized (shutdownLock) {
+                    shutdownLock.notify();
+                }
             });
+            synchronized (shutdownLock) {
+                try {
+                    shutdownLock.wait();
+                } catch (InterruptedException e) {
+                    // do nothing
+                }
+            }
             vertx = null;
             completionHandler = null;
+            applicationVerticle = null;
+            logger.info("Application stopped");
+            System.out.println("Application stopped");
         } else {
             logger.warn("Application is not running, nothing to stop.");
         }
     }
 
+    /**
+     * Checks if the application is currently running.
+     *
+     * @return {@code true} if the application is running, {@code false} otherwise
+     */
+    public boolean isRunning() {
+        return vertx != null;
+    }
+
+    /**
+     * Generates a JWT token for a user with the specified user ID and roles.
+     *
+     * @param userId    the ID of the user
+     * @param roles     the list of roles assigned to the user
+     * @param jwtSecret the secret key used for signing JWT tokens. It can be a plain password or a string in PEM format
+     * @return a signed JWT token as a string
+     */
+    public String generateJWTToken(String userId, List<String> roles, String jwtSecret) {
+        return JWTUtil.generateToken(vertx, userId, roles, jwtSecret);
+    }
+
+    /**
+     * Returns the Vert.x instance associated with this application.
+     * This instance can be used to access Vert.x functionality directly.
+     *
+     * @return the {@link Vertx} instance used by this application, or {@code null} if the application hasn't been started
+     */
+    public Vertx getVertx() {
+        return vertx;
+    }
 
     /**
      * Returns any failure that occurred during the execution of the completion handler.
@@ -233,14 +276,31 @@ public class Application extends AbstractVerticle {
         inputThread.start();
     }
 
+    private static final Object shutdownLock= new Object();
+
+    /**
+     * Registers a shutdown hook that ensures the application is properly stopped when the JVM shuts down.
+     * If the application is running when the shutdown hook is triggered, it will initiate a graceful
+     * shutdown of the application by calling the stop() method.
+     */
+    public void handleShutdown() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (isRunning()) {
+                System.out.println("Shutting down...");
+                stop();
+            }
+        }));
+    }
+
     private void createHttpServer(Promise<Void> startPromise, Router router, int port) {
         vertx.createHttpServer()
                 .requestHandler(router)
                 .listen(port)
                 .onComplete(result -> {
                     if (result.succeeded()) {
-                        logger.info("Application started on port: " + port);
+                        logger.info("Server started on port: " + port);
                         startPromise.complete();
+                        logger.info("Application started");
                         if (completionHandler != null) {
                             CompletableFuture.supplyAsync(() -> {
                                 try {
@@ -254,7 +314,7 @@ public class Application extends AbstractVerticle {
                             });
                         }
                     } else {
-                        logger.error("Application failed to start on port: " + port + " - " +
+                        logger.error("Server failed to start on port: " + port + " - " +
                                 result.cause().getMessage());
                         startPromise.fail(result.cause());
                         if (failureHandler != null) {

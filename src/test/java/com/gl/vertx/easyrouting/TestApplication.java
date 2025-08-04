@@ -60,6 +60,7 @@ public class TestApplication {
 
         public static void main(String[] args) {
             TestApplicationImpl app = new TestApplicationImpl();
+            app.handleShutdown();
             app.start(8080, Application::waitForInput);
         }
     }
