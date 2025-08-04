@@ -38,7 +38,6 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.HttpException;
 import org.slf4j.LoggerFactory;
 
-import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -421,16 +420,7 @@ public class EasyRouting {
             } else {
                 OptionalParam optionalParam = parameter.getAnnotation(OptionalParam.class);
                 if (optionalParam != null) {
-                    Object value = null;
-                    if (parameterTypes[i] == String.class)
-                        value = optionalParam.stringDefault();
-                    else if (parameterTypes[i] == Integer.class || parameterTypes[i] == int.class ||
-                            parameterTypes[i] == Long.class || parameterTypes[i] == long.class)
-                        value = optionalParam.integerDefault();
-                    else if (parameterTypes[i] == Double.class || parameterTypes[i] == double.class ||
-                            parameterTypes[i] == Float.class || parameterTypes[i] == float.class)
-                        value = optionalParam.doubleDefault();
-                    result.add(value);
+                    result.add(convertValue(parameterTypes[i], optionalParam.defaultValue()));
                 } else {
                     result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters));
                 }

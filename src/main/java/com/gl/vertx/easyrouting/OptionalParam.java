@@ -43,7 +43,8 @@ public @interface OptionalParam {
      * @return the name of the method field
      */
     String value();
-    String stringDefault() default "";
-    int integerDefault() default 0;
-    double doubleDefault() default 0;
+    /*
+     * Specifies the default value for the parameter.
+     */
+    String defaultValue() default "";
 }
