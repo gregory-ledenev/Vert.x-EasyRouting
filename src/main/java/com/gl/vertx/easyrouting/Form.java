@@ -31,7 +31,7 @@ import java.lang.annotation.Target;
 
 
 /**
- * Annotation used to mark methods that handle HTML form submissions in a Vert.x web application.
+ * Annotation used to mark methods that handle HTML form submissions.
  * When applied to a method, it indicates that the method processes form data submitted through
  * an HTML form.
  */

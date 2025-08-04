@@ -53,21 +53,30 @@ import static com.gl.vertx.easyrouting.EasyRouting.REDIRECT;
  */
 public class HandlerResult<T> {
     private static final Logger logger = LoggerFactory.getLogger(HandlerResult.class);
+
+    public static final String CONTENT_TYPE = "content-type";
+    public static final String CONTENT_DISPOSITION = "content-disposition";
+
+    public static final String CT_TEXT_PLAIN = "text/plain";
+    public static final String CT_TEXT_HTML = "text/html";
+    public static final String CT_APPLICATION_JSON = "application/json";
+    public static final String CT_APPLICATION_OCTET_STREAM = "application/octet-stream";
+
     private final T result;
     private Map<String, String> headers = new HashMap<>();
     private int statusCode;
 
     /**
-     * Creates a HandlerResult for sending HTML content.
+     * Creates a HandlerResult for sending plain text content.
      *
-     * @param html The HTML content to send
-     * @return HandlerResult configured for HTML response
+     * @param text The plain text content to send
+     * @return HandlerResult configured for response
      */
-    public static HandlerResult<String> html(String html) {
-        Objects.requireNonNull(html);
+    public static HandlerResult<String> plainText(String text) {
+        Objects.requireNonNull(text);
 
-        return new HandlerResult<String>(html,
-                Map.of("content-type", "text/html"));
+        return new HandlerResult<String>(text,
+                Map.of(CONTENT_TYPE, CT_TEXT_PLAIN));
     }
 
     /**
@@ -82,7 +91,7 @@ public class HandlerResult<T> {
         try {
             String html = Files.readString(path);
             return new HandlerResult<String>(html,
-                    Map.of("content-type", "text/html"));
+                    Map.of(CONTENT_TYPE, CT_TEXT_HTML));
         } catch (IOException e) {
             logger.error("Failed to read HTML file: " + path, e);
             return new HandlerResult<String>("Failed to read HTML file: " + path.getFileName().toString(), 500);
@@ -104,14 +113,22 @@ public class HandlerResult<T> {
         return new HandlerResult<>(redirect) {
 
             @Override
-            void handle(RoutingContext ctx) {
+            public void handle(RoutingContext ctx) {
                 for (FileUpload fileUpload : fileUploads) {
                     String uploadedFileName = fileUpload.uploadedFileName();
                     String fileName = fileUpload.fileName();
-                    try {
-                        Files.copy(Path.of(uploadedFileName), Path.of(folder, fileName), StandardCopyOption.REPLACE_EXISTING);
-                    } catch (Exception e) {
-                        ctx.fail(e);
+                    if (! fileName.isEmpty()) {
+                        try {
+                            Files.copy(Path.of(uploadedFileName), Path.of(folder, fileName), StandardCopyOption.REPLACE_EXISTING);
+                        } catch (Exception e) {
+                            logger.error("Failed to save uploaded file: " + fileName, e);
+                            ctx.response().setStatusCode(400).end("Failed to save uploaded file: " + fileName);
+                            return;
+                        }
+                    } else {
+                        logger.warn("Uploaded file is missing");
+                        ctx.response().setStatusCode(400).end("Uploaded file is missing");
+                        return;
                     }
                 }
 
@@ -131,10 +148,9 @@ public class HandlerResult<T> {
         Objects.requireNonNull(buffer);
         Objects.requireNonNull(fileName);
 
-        ;
         return new HandlerResult<>(buffer, Map.of(
-                "Content-Type", getMimeType(fileName),
-                "Content-Disposition", MessageFormat.format("attachment; filename=\"{0}\"", fileName)
+                CONTENT_TYPE, getMimeType(fileName),
+                CONTENT_DISPOSITION, MessageFormat.format("attachment; filename=\"{0}\"", fileName)
         ));
     }
 
@@ -160,7 +176,7 @@ public class HandlerResult<T> {
         FileNameMap fileNameMap = URLConnection.getFileNameMap();
         String mimeType = fileNameMap.getContentTypeFor(fileName);
         if (mimeType == null)
-            mimeType = "application/octet-stream";
+            mimeType = CT_APPLICATION_OCTET_STREAM;
 
         return mimeType;
     }
@@ -196,9 +212,7 @@ public class HandlerResult<T> {
      * @param headers The HTTP headers to include in the response
      */
     public HandlerResult(T result, Map<String, String> headers) {
-        this.result = result;
-        this.statusCode = 200;
-        this.headers = headers;
+        this(result, headers, 200);
     }
 
     /**
@@ -258,19 +272,19 @@ public class HandlerResult<T> {
         this.headers.put(key, value);
     }
 
-    void handle(RoutingContext ctx) {
+    public void handle(RoutingContext ctx) {
         try {
             headers.forEach(ctx.response()::putHeader);
 
             if (getStatusCode() == 200) {
                 if (result instanceof Path filePath) {
-                    ctx.response().putHeader("content-type", "application/octet-stream");
-                    ctx.response().putHeader("content-disposition", MessageFormat.format("attachment; filename=\"{0}\"", filePath.getFileName().toString()));
+                    ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_OCTET_STREAM);
+                    ctx.response().putHeader(CONTENT_DISPOSITION, MessageFormat.format("attachment; filename=\"{0}\"", filePath.getFileName().toString()));
                     ctx.response().sendFile(filePath.toString())
                             .onSuccess(v -> ctx.response())
                             .onFailure(ctx::fail);
                 } else if (result instanceof Buffer buffer) {
-                    ctx.response().putHeader("content-type", "application/octet-stream");
+                    ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_OCTET_STREAM);
                     ctx.response().send(buffer);
                 } else if (result instanceof JsonObject jsonObject) {
                     sendJsonResponse(ctx, jsonObject.encodePrettily());
@@ -280,7 +294,7 @@ public class HandlerResult<T> {
                     handleMapResult(ctx, map);
                 } else if (result instanceof Collection<?> collection) {
                     handleCollectionResult(ctx, collection);
-                } else if (result.getClass().isArray()) {
+                } else if (result != null && result.getClass().isArray()) {
                     handleArrayResult(ctx, result);
                 } else if (result instanceof Number || result instanceof Boolean) {
                     sendPlainTextResponse(ctx, result.toString());
@@ -293,21 +307,23 @@ public class HandlerResult<T> {
                 ctx.response().setStatusCode(getStatusCode()).end();
             }
         } catch (HttpException e) {
+            logger.error("Error sending result: ", e);
             ctx.response().setStatusCode(e.getStatusCode()).end(e.getMessage());
         } catch (Exception e) {
+            logger.error("Error handling result: ", e);
             ctx.response().setStatusCode(500).end();
         }
     }
 
     private void sendJsonResponse(RoutingContext ctx, String json) {
         ctx.response()
-                .putHeader("content-type", "application/json")
+                .putHeader(CONTENT_TYPE, CT_APPLICATION_JSON)
                 .end(json);
     }
 
     private void sendPlainTextResponse(RoutingContext ctx, String text) {
         ctx.response()
-                .putHeader("content-type", "text/plain")
+                .putHeader(CONTENT_TYPE, CT_TEXT_PLAIN)
                 .end(text);
     }
 
@@ -337,9 +353,9 @@ public class HandlerResult<T> {
             String redirectPath = string.substring(REDIRECT.length());
             ctx.redirect(redirectPath);
         } else {
-            if (ctx.response().headers().size() == 0)
+            if (! ctx.response().headers().contains(CONTENT_TYPE))
                 ctx.response()
-                        .putHeader("content-type", "text/html")
+                        .putHeader(CONTENT_TYPE, CT_TEXT_HTML)
                         .end(string);
             else
                 ctx.response().end(string);
@@ -351,6 +367,7 @@ public class HandlerResult<T> {
             JsonObject jsonObject = JsonObject.mapFrom(result);
             sendJsonResponse(ctx, jsonObject.encodePrettily());
         } catch (Exception e) {
+            logger.error("Failed to convert result to JSON: " + result, e);
             sendPlainTextResponse(ctx, result.toString());
         }
     }

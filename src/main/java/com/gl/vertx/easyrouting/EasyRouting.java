@@ -36,6 +36,7 @@ import io.vertx.ext.web.Route;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.HttpException;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.annotation.Annotation;
@@ -52,8 +53,19 @@ import static com.gl.vertx.easyrouting.JWTUtil.ROLES;
  * EasyRouting provides annotation-based HTTP request handling for Vert.x web applications. It simplifies route
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
+ *
+ *  * @version 0.9.5
+ *  * @since 0.9.0
  */
 public class EasyRouting {
+    /**
+     * Current version of the EasyRouting library.
+     */
+    public static final String VERSION = "0.9.5";
+
+
+    private static final Logger logger = LoggerFactory.getLogger(EasyRouting.class);
+
     public static final String REDIRECT = "redirect:";
     private static final String ERROR_HANDLING_ANNOTATED_METHOD = "Error handling annotated method: \"{0}\" for parameters: \"{1}\" {2}";
 
@@ -243,7 +255,7 @@ public class EasyRouting {
             for (Method method : listHandlerMethods(annotationClass, target)) {
                 Annotation annotation = method.getAnnotation(annotationClass);
                 if (annotation != null) {
-                    System.out.println("Setting up method for annotation: " + annotation);
+                    logger.info("Setting up method for annotation: " + annotation);
                     String annotationValue = annotation.getClass().getMethod("value").invoke(annotation).toString();
                     if (annotationValue != null) {
                         // skip already installed handlers for the same path. annotation contains both path and method, so it is enough.
@@ -262,12 +274,11 @@ public class EasyRouting {
                             router.put(annotationValue).handler(createHandler(annotation, target));
                         else if (annotationClass == HttpMethods.PATCH.class)
                             router.patch(annotationValue).handler(createHandler(annotation, target));
-                        else
-                            throw new RuntimeException("Failed to setup handlers. Unsupported annotation: " + annotation);
                     }
                 }
             }
         } catch (Exception e) {
+            logger.error("Failed to setup handlers for annotation: " + annotationClass, e);
             throw new RuntimeException(e);
         }
     }

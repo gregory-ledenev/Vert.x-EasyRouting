@@ -30,19 +30,33 @@ import io.vertx.core.Vertx;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.HttpException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Scanner;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-import java.util.logging.Logger;
 
 /**
- * An application class that allows building minimal applications for prototyping and testing purposes.
+ * An application class that allows building minimal applications for prototyping and testing purposes. The application
+ * can be made in a few lines:
+ * <pre>
+ * {@code
+ *     class HelloWorld extends Application {
+ *         @GET("/*")
+ *         String hello() {
+ *             return "Hello World!";
+ *         }
+ *
+ *         public static void main(String[] args) {
+ *             new HelloWorld().start();
+ *         }
+ *     }
+ * }</pre>
  */
 public class Application extends AbstractVerticle {
-    private Vertx vertx;
-    private final Logger logger = Logger.getLogger(this.getClass().getName());
+    private final Logger logger = LoggerFactory.getLogger(getClass());
     private int port;
     private boolean readInput;
     private Consumer<Application> completionHandler;
@@ -82,8 +96,14 @@ public class Application extends AbstractVerticle {
     }
 
     /**
+     * Starts the application on the 8080.
+     */
+    public void start() {
+        start(8080, null);
+    }
+
+    /**
      * Starts the application on the specified port.
-     * If the application is already running, a warning message will be logged.
      *
      * @param port the port number on which to start the server
      */
@@ -93,7 +113,6 @@ public class Application extends AbstractVerticle {
 
     /**
      * Starts the application on the specified port.
-     * If the application is already running, a warning message will be logged.
      *
      * @param port              the port number on which to start the server
      * @param completionHandler a callback function that will be called when the server starts successfully
@@ -104,10 +123,10 @@ public class Application extends AbstractVerticle {
 
     /**
      * Starts the application on the specified port.
-     * If the application is already running, a warning message will be logged.
      *
      * @param port              the port number on which to start the server
      * @param completionHandler a callback function that will be called when the server starts successfully
+     * @param failureHandler    a callback function that will be called when the server fails to start
      */
     public void start(int port, Consumer<Application> completionHandler, BiConsumer<Application, Throwable> failureHandler) {
         if (vertx == null) {
@@ -118,7 +137,7 @@ public class Application extends AbstractVerticle {
             vertx.deployVerticle(this);
             startWaiting();
         } else {
-            logger.warning("Application is already running on port: " + this.port);
+            logger.warn("Application is already running on port: " + this.port);
         }
     }
 
@@ -135,7 +154,7 @@ public class Application extends AbstractVerticle {
             vertx = null;
             completionHandler = null;
         } else {
-            logger.warning("Application is not running, nothing to stop.");
+            logger.warn("Application is not running, nothing to stop.");
         }
     }
 
@@ -159,7 +178,7 @@ public class Application extends AbstractVerticle {
 
     /**
      * Starts a console input loop that waits for user commands.
-     * The application can be stopped by entering 'exit'.
+     * The application can be gracefully stopped by entering 'exit'.
      */
     public void waitForInput() {
         readInput = true;
@@ -177,14 +196,7 @@ public class Application extends AbstractVerticle {
         inputThread.setDaemon(true);
         inputThread.start();
     }
-    
-    /**
-     * Creates and configures the HTTP server with the provided router.
-     *
-     * @param startPromise Promise to be completed when the server has started
-     * @param router       Router instance containing configured routes
-     * @param port         the port number on which to start the server
-     */
+
     private void createHttpServer(Promise<Void> startPromise, Router router, int port) {
         vertx.createHttpServer()
                 .requestHandler(router)
@@ -200,7 +212,7 @@ public class Application extends AbstractVerticle {
                             });
                         }
                     } else {
-                        logger.severe("Application failed to start on port: " + port + " - " +
+                        logger.error("Application failed to start on port: " + port + " - " +
                                 result.cause().getMessage());
                         startPromise.fail(result.cause());
                         if (failureHandler != null) {
@@ -226,10 +238,5 @@ public class Application extends AbstractVerticle {
             // For other errors, you can handle or propagate
             ctx.next();
         });
-    }
-
-    @Override
-    public Vertx getVertx() {
-        return vertx;
     }
 }
