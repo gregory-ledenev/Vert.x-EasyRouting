@@ -5,7 +5,7 @@
 
     <groupId>com.gl.vertx.easyrouting</groupId>
     <artifactId>com-gl-vertx-easyrouting</artifactId>
-    <version>1.0.0</version>
+    <version>0.9.5</version>
     <packaging>jar</packaging>
 
     <name>EasyRouting for Vert.x</name>

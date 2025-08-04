@@ -18,6 +18,10 @@ public class TestApplication {
 
         public static final String JWT_PASSWORD = "veeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeery long password";
 
+        @Deprecated
+        void doNothing() {
+        }
+
         @GET("/*")
         String hello() {
             return "Hello from TestApplication!";
@@ -62,8 +66,6 @@ public class TestApplication {
 
     @Test
     void testApplication() throws Throwable {
-        final List<Throwable> exceptions = new ArrayList<>();
-
         TestApplicationImpl app = new TestApplicationImpl();
         app.start(8080, application -> {
 
@@ -78,14 +80,13 @@ public class TestApplication {
                 assertEquals(200, response.statusCode());
                 assertEquals("Hello from TestApplication!", response.body());
             } catch (Throwable e) {
-                exceptions.add(e);
+                throw new RuntimeException(e);
             } finally {
                 application.stop();
             }
-        },  (application, throwable) -> exceptions.add(throwable));
-        if (exceptions.size() > 0) {
-            throw exceptions.get(0);
-        }
+        });
+
+        app.handleCompletionHandlerFailure();
     }
 
     static final String JWT_TOKEN_USER_ADMIN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0VXNlciIsInJvbGVzIjpbInVzZXIiLCJhZG1pbiJdLCJpYXQiOjE3NTQyNTUwMDN9.VgvXLusig-wC447NHetSonDfP60qlYI7yjFGvqvOqfo";
@@ -93,8 +94,6 @@ public class TestApplication {
 
     @Test
     void testFormSubmit() throws Throwable {
-        final List<Throwable> exceptions = new ArrayList<>();
-
         TestApplicationImpl app = new TestApplicationImpl();
         app.start(8080, application -> {
 
@@ -110,21 +109,17 @@ public class TestApplication {
                 assertEquals(200, response.statusCode());
                 System.out.println(response.body());
             } catch (Throwable e) {
-                exceptions.add(e);
+                throw new RuntimeException(e);
             } finally {
                 application.stop();
             }
-        },  (application, throwable) -> exceptions.add(throwable));
+        });
 
-        if (exceptions.size() > 0) {
-            throw exceptions.get(0);
-        }
+        app.handleCompletionHandlerFailure();
     }
 
     @Test
     void testUnauthenticated() throws Throwable {
-        final List<Throwable> exceptions = new ArrayList<>();
-
         TestApplicationImpl app = new TestApplicationImpl();
         app.start(8080, application -> {
 
@@ -139,20 +134,17 @@ public class TestApplication {
                 assertEquals(302, response.statusCode()); // redirect /loginForm
                 System.out.println(response.body());
             } catch (Throwable e) {
-                exceptions.add(e);
+                throw new RuntimeException(e);
             } finally {
                 application.stop();
             }
-        },  (application, throwable) -> exceptions.add(throwable));
-        if (exceptions.size() > 0) {
-            throw exceptions.get(0);
-        }
+        });
+
+        app.handleCompletionHandlerFailure();
     }
 
     @Test
     void testAuthorized() throws Throwable {
-        final List<Throwable> exceptions = new ArrayList<>();
-
         TestApplicationImpl app = new TestApplicationImpl();
         app.start(8080, application -> {
 
@@ -168,20 +160,17 @@ public class TestApplication {
                 assertEquals(200, response.statusCode());
                 assertEquals("Hello protected API!", response.body());
             } catch (Throwable e) {
-                exceptions.add(e);
+                throw new RuntimeException(e);
             } finally {
                 application.stop();
             }
-        },  (application, throwable) -> exceptions.add(throwable));
-        if (exceptions.size() > 0) {
-            throw exceptions.get(0);
-        }
+        });
+
+        app.handleCompletionHandlerFailure();
     }
 
     @Test
     void testAuthorizedForUserAndAdmin() throws Throwable {
-        final List<Throwable> exceptions = new ArrayList<>();
-
         TestApplicationImpl app = new TestApplicationImpl();
         app.start(8080, application -> {
 
@@ -197,20 +186,17 @@ public class TestApplication {
                 assertEquals(200, response.statusCode());
                 assertEquals("Hello protected API (user)!", response.body());
             } catch (Throwable e) {
-                exceptions.add(e);
+                throw new RuntimeException(e);
             } finally {
                 application.stop();
             }
-        },  (application, throwable) -> exceptions.add(throwable));
-        if (exceptions.size() > 0) {
-            throw exceptions.get(0);
-        }
+        });
+
+        app.handleCompletionHandlerFailure();
     }
 
     @Test
     void testAuthorizedForAdmin() throws Throwable {
-        final List<Throwable> exceptions = new ArrayList<>();
-
         TestApplicationImpl app = new TestApplicationImpl();
         app.start(8080, application -> {
 
@@ -226,20 +212,17 @@ public class TestApplication {
                 assertEquals(200, response.statusCode());
                 assertEquals("Hello protected API (admin)!", response.body());
             } catch (Throwable e) {
-                exceptions.add(e);
+                throw new RuntimeException(e);
             } finally {
                 application.stop();
             }
-        },  (application, throwable) -> exceptions.add(throwable));
-        if (exceptions.size() > 0) {
-            throw exceptions.get(0);
-        }
+        });
+
+        app.handleCompletionHandlerFailure();
     }
 
     @Test
     void testUnauthorizedForAdmin() throws Throwable {
-        final List<Throwable> exceptions = new ArrayList<>();
-
         TestApplicationImpl app = new TestApplicationImpl();
         app.start(8080, application -> {
 
@@ -254,14 +237,13 @@ public class TestApplication {
                 HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                 assertEquals(403, response.statusCode());
             } catch (Throwable e) {
-                exceptions.add(e);
+                throw new RuntimeException(e);
             } finally {
                 application.stop();
             }
-        },  (application, throwable) -> exceptions.add(throwable));
-        if (exceptions.size() > 0) {
-            throw exceptions.get(0);
-        }
+        });
+
+        app.handleCompletionHandlerFailure();
     }
 
     static class HelloWorld extends Application {

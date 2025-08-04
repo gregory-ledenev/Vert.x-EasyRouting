@@ -63,6 +63,8 @@ public class Application extends AbstractVerticle {
     private final String[] jwtRoutes;
     private BiConsumer<Application, Throwable> failureHandler;
 
+    private Throwable completionHandlerFailure;
+
     public Application(String jwtSecret, String... jwtRoutes) {
         this.jwtSecret = jwtSecret;
         this.jwtRoutes = jwtRoutes;
@@ -123,7 +125,8 @@ public class Application extends AbstractVerticle {
      * Starts the application on the specified port.
      *
      * @param port              the port number on which to start the server
-     * @param completionHandler a callback function that will be called when the server starts successfully
+     * @param completionHandler a callback function that will be called when the server starts successfully. You may put
+     *                          your testing code to that handler to ensure it runs only when the server is ready.
      * @param failureHandler    a callback function that will be called when the server fails to start
      */
     public void start(int port, Consumer<Application> completionHandler, BiConsumer<Application, Throwable> failureHandler) {
@@ -155,6 +158,41 @@ public class Application extends AbstractVerticle {
             logger.warn("Application is not running, nothing to stop.");
         }
     }
+
+
+    /**
+     * Returns any failure that occurred during the execution of the completion handler.
+     * This method can be used to check if there were any errors when the application
+     * completed its startup process.
+     *
+     * @return the {@code Throwable} that occurred during completion handler execution, or {@code null} if no error occurred
+     */
+    public Throwable getCompletionHandlerFailure() {
+        return completionHandlerFailure;
+    }
+
+
+    /**
+     * Handles any failures that occurred during the execution of the completion handler.
+     * If a completion handler failure exists, this method will throw the appropriate exception:
+     * - If the failure's cause is an {@code AssertionError}, it throws the cause
+     * - Otherwise, it throws the completion handler failure itself
+     * <p>
+     * This method is particularly useful for testing scenarios where you need to propagate
+     * assertion failures from the completion handler to the test method.
+     *
+     * @throws Throwable if a completion handler failure occurred, either the original failure
+     *                   or its cause in case of AssertionError
+     */
+    public void handleCompletionHandlerFailure() throws Throwable {
+        if (getCompletionHandlerFailure() != null) {
+            if (getCompletionHandlerFailure().getCause() instanceof AssertionError)
+                throw getCompletionHandlerFailure().getCause();
+            else
+                throw getCompletionHandlerFailure();
+        }
+    }
+
 
     private final Object waitLock = new Object();
 
@@ -205,7 +243,13 @@ public class Application extends AbstractVerticle {
                         startPromise.complete();
                         if (completionHandler != null) {
                             CompletableFuture.supplyAsync(() -> {
-                                completionHandler.accept(this);
+                                try {
+                                    completionHandler.accept(this);
+                                } catch (Throwable e) {
+                                    completionHandlerFailure = e;
+                                }
+                                if (completionHandlerFailure != null)
+                                    throw new RuntimeException(completionHandlerFailure);
                                 return null;
                             });
                         }
