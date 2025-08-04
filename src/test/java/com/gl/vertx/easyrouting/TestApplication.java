@@ -25,7 +25,7 @@ public class TestApplication {
 
         @Form
         @POST("/login")
-        String login(@Param("user") String user, @Param("password") String password, @OptionalParam("role") String role) {
+        String login(@Param("user") String user, @Param("password") String password, @OptionalParam(value = "role", stringDefault = "viewer") String role) {
             return JWTUtil.generateToken(getVertx(), user, Arrays.asList(role.split(",")), JWT_PASSWORD);
         }
 

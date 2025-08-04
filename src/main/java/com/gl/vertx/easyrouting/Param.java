@@ -30,7 +30,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Annotation used to bind handler methods parameters to HTTP query parameters.
+ * Annotation used to bind handler methods parameters to HTTP query parameters or form arguments.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.PARAMETER)

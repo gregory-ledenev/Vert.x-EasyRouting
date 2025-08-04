@@ -419,7 +419,21 @@ public class EasyRouting {
             } else if (parameter.getAnnotation(UploadsParam.class) != null) {
                 result.add(ctx.fileUploads());
             } else {
-                result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters));
+                OptionalParam optionalParam = parameter.getAnnotation(OptionalParam.class);
+                if (optionalParam != null) {
+                    Object value = null;
+                    if (parameterTypes[i] == String.class)
+                        value = optionalParam.stringDefault();
+                    else if (parameterTypes[i] == Integer.class || parameterTypes[i] == int.class ||
+                            parameterTypes[i] == Long.class || parameterTypes[i] == long.class)
+                        value = optionalParam.integerDefault();
+                    else if (parameterTypes[i] == Double.class || parameterTypes[i] == double.class ||
+                            parameterTypes[i] == Float.class || parameterTypes[i] == float.class)
+                        value = optionalParam.doubleDefault();
+                    result.add(value);
+                } else {
+                    result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters));
+                }
             }
         }
 
@@ -459,7 +473,10 @@ public class EasyRouting {
     }
 
     private static Object convertValue(String parameterName, Class<?> parameterType, MultiMap parameters) {
-        String value = parameters.get(parameterName);
+        return convertValue(parameterType, parameters.get(parameterName));
+    }
+
+    private static Object convertValue(Class<?> parameterType, String value) {
         if (parameterType == Integer.class || parameterType == int.class)
             return value != null ? Integer.parseInt(value) : 0;
         if (parameterType == Short.class || parameterType == short.class)

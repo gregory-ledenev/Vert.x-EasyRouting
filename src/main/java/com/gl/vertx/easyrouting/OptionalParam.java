@@ -30,8 +30,9 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Annotation used to bind handler methods parameters to HTTP query parameters. This annotation defines a parameter as
- * an optional one, meaning that it can be missing in the request.
+ * Annotation used to bind handler methods parameters to HTTP query parameters or form arguments. This annotation
+ * defines a parameter as an optional one, meaning that it can be missing in the request. Missing parameters will be
+ * set to {@code null} for objects or {@code 0} for numerics in the method handler.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.PARAMETER)
@@ -42,4 +43,7 @@ public @interface OptionalParam {
      * @return the name of the method field
      */
     String value();
+    String stringDefault() default "";
+    int integerDefault() default 0;
+    double doubleDefault() default 0;
 }
