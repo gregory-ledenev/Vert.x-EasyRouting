@@ -94,7 +94,6 @@ public class JWTUtil {
     /**
      * Synchronously parses a JWT token and extracts user information and roles.
      * This method blocks the current thread until the token is parsed.
-     *
      * <b>NOT call this method on Vert.x event loop threads, <b/> use async version instead.
      *
      * @param token     the JWT token to parse
@@ -189,9 +188,11 @@ public class JWTUtil {
             }
 
             routingContext.request().headers().set("X-User-ID", userId);
-            routingContext.request().headers().set("X-User-Roles", rolesArray.stream()
-                    .map(Object::toString)
-                    .collect(Collectors.joining(",")));
+            if (rolesArray != null) {
+                routingContext.request().headers().set("X-User-Roles", rolesArray.stream()
+                        .map(Object::toString)
+                        .collect(Collectors.joining(",")));
+            }
 
             handler.handle(routingContext);
         };

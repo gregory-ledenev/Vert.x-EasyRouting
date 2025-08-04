@@ -29,7 +29,6 @@ import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
-import io.vertx.ext.web.handler.HttpException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,10 +77,9 @@ public class Application extends AbstractVerticle {
      * This method is called when the verticle is deployed.
      *
      * @param startPromise Promise to be completed when the server has started
-     * @throws Exception if server initialization fails
      */
     @Override
-    public void start(Promise<Void> startPromise) throws Exception {
+    public void start(Promise<Void> startPromise) {
         Router router = Router.router(vertx);
 
         router.route().handler(BodyHandler.create());
@@ -221,22 +219,5 @@ public class Application extends AbstractVerticle {
                         stopWaiting();
                     }
                 });
-    }
-
-    private static void createFailureHandler(Router router) {
-        router.route().failureHandler(ctx -> {
-            Throwable failure = ctx.failure();
-            if (failure instanceof HttpException) {
-                HttpException httpEx = (HttpException) failure;
-                if (httpEx.getStatusCode() == 401) {
-                    ctx.response()
-                            .setStatusCode(401)
-                            .end("Unauthorized: " + httpEx.getMessage());
-                    return;
-                }
-            }
-            // For other errors, you can handle or propagate
-            ctx.next();
-        });
     }
 }

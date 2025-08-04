@@ -145,6 +145,7 @@ public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @Upl
     return HandlerResult.saveFiles("files", fileUploads, "redirect:/");
 }
 ```
+
 7. **Handle form submissions** - Use the `@Form` annotation to bind form
    fields to method arguments:
 ```java

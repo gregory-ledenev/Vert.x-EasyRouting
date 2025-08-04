@@ -75,7 +75,7 @@ public class HandlerResult<T> {
     public static HandlerResult<String> plainText(String text) {
         Objects.requireNonNull(text);
 
-        return new HandlerResult<String>(text,
+        return new HandlerResult<>(text,
                 Map.of(CONTENT_TYPE, CT_TEXT_PLAIN));
     }
 
@@ -90,11 +90,11 @@ public class HandlerResult<T> {
 
         try {
             String html = Files.readString(path);
-            return new HandlerResult<String>(html,
+            return new HandlerResult<>(html,
                     Map.of(CONTENT_TYPE, CT_TEXT_HTML));
         } catch (IOException e) {
             logger.error("Failed to read HTML file: " + path, e);
-            return new HandlerResult<String>("Failed to read HTML file: " + path.getFileName().toString(), 500);
+            return new HandlerResult<>("Failed to read HTML file: " + path.getFileName().toString(), 500);
         }
     }
 
@@ -192,7 +192,7 @@ public class HandlerResult<T> {
     }
 
     /**
-     * Constructs a HandlerResult with a result value, headers and status code.
+     * Constructs a HandlerResult with a result value, headers, and status code.
      *
      * @param result     The result value
      * @param headers    The HTTP headers to include in the response

@@ -53,9 +53,8 @@ import static com.gl.vertx.easyrouting.JWTUtil.ROLES;
  * EasyRouting provides annotation-based HTTP request handling for Vert.x web applications. It simplifies route
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
- *
- *  * @version 0.9.5
- *  * @since 0.9.0
+ * @version 0.9.5
+ * @since 0.9.0
  */
 public class EasyRouting {
     /**
@@ -90,7 +89,7 @@ public class EasyRouting {
     }
 
     /**
-     * Applies JWT authentication with common "HS256" algorithm to a specified route in the given router.
+     * Applies JWT authentication with the common "HS256" algorithm to a specified route in the given router.
      * Sample use would be as simple as:<br><br>
      * {@code JWTUtil.applyAuth(vertx, router, "/api/*", "very long password");}
      * <br><br>
@@ -136,7 +135,7 @@ public class EasyRouting {
         for (Method method : target.getClass().getDeclaredMethods()) {
             StatusCode statusCodeAnnotation = method.getAnnotation(StatusCode.class);
             if (statusCodeAnnotation != null && statusCodeAnnotation.value() == statusCode) {
-                // Get supported HTTP method annotation (GET, POST etc)
+                // Get supported HTTP method annotation (GET, POST, etc.)
                 for (Class<? extends Annotation> httpMethod : Arrays.asList(HttpMethods.GET.class, HttpMethods.POST.class, HttpMethods.DELETE.class, HttpMethods.PUT.class, HttpMethods.PATCH.class)) {
                     Annotation methodAnnotation = method.getAnnotation(httpMethod);
                     if (methodAnnotation != null) {
@@ -193,7 +192,7 @@ public class EasyRouting {
                     return nonEmptyCount2 - nonEmptyCount1; // Reverse order for "more on top"
                 }
 
-                // 2. Paths with same number of segments should be sorted alphabetically segment by segment
+                // 2. Paths with the same number of segments should be sorted alphabetically segment by segment
                 int minSegments = Math.min(segments1.length, segments2.length);
                 for (int i = 0; i < minSegments; i++) {
                     String seg1 = i < segments1.length ? segments1[i] : "";
@@ -216,7 +215,7 @@ public class EasyRouting {
                     }
                 }
 
-                // If we've compared all segments and they're equal up to this point,
+                // If we've compared all segments, and they're equal up to this point,
                 // check if one path has a wildcard at the end and the other doesn't
                 boolean endsWithWildcard1 = path1.endsWith("*");
                 boolean endsWithWildcard2 = path2.endsWith("*");
@@ -258,7 +257,7 @@ public class EasyRouting {
                     logger.info("Setting up method for annotation: " + annotation);
                     String annotationValue = annotation.getClass().getMethod("value").invoke(annotation).toString();
                     if (annotationValue != null) {
-                        // skip already installed handlers for the same path. annotation contains both path and method, so it is enough.
+                        // skip already installed handlers for the same path. the annotation contains both path and method, so it is enough.
                         String installedHandlerKey = annotation.toString();
                         if (installedHandlers.contains(installedHandlerKey))
                             continue;
@@ -397,7 +396,7 @@ public class EasyRouting {
                         otherParamCount++;
                         hasBodyParam = true;
                         paramNames.add(param.value());
-                    } else if (paramAnnotation instanceof UploadsParam param) {
+                    } else if (paramAnnotation instanceof UploadsParam) {
                         otherParamCount++;
                         paramNames.add("uploads");
                     }

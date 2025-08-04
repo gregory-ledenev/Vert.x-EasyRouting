@@ -1,33 +1,27 @@
 package com.gl.vertx.easyrouting;
 
 import io.vertx.core.AbstractVerticle;
-import io.vertx.core.Handler;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
-import io.vertx.core.buffer.Buffer;
 import io.vertx.ext.web.FileUpload;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.HttpException;
+import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.StandardCopyOption;
 import java.text.MessageFormat;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
 import java.io.File;
 import java.util.Arrays;
-import java.util.Map;
 
 import static com.gl.vertx.easyrouting.HttpMethods.*;
-import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
 public class TestEasyRouting {
@@ -41,10 +35,6 @@ public class TestEasyRouting {
                     if (deployment.succeeded()) {
                         System.out.println("Test verticle deployed successfully.");
                         HttpClient client = HttpClient.newHttpClient();
-//                        testPath(client, "/");
-//                        testPath(client, "/?name=John");
-//                        testPath(client, "/greeting/?name=Woo%20Hoo!");
-//                        testPath(client, "/files/serveFile?fileName=nntws-overview.jpeg");
                         createUser(client);
                     } else {
                         System.err.println("Failed to deploy test verticle: " + deployment.cause());
@@ -53,6 +43,7 @@ public class TestEasyRouting {
         try {
             Thread.sleep(500000);
         } catch (InterruptedException aE) {
+            // do nothing
         }
     }
 
@@ -82,7 +73,7 @@ public class TestEasyRouting {
                 .uri(URI.create("http://" + HOST + ":" + PORT + path));
         HttpRequest request = builder.GET().build();
 
-        HttpResponse<String> response = null;
+        HttpResponse<String> response;
         try {
             response = client.send(request, HttpResponse.BodyHandlers.ofString());
             System.out.println(MessageFormat.format("Response for path - \"{0}\" {1}", path, response.body()));
@@ -135,11 +126,14 @@ public class TestEasyRouting {
             File folder = new File("files");
             StringBuilder fileList = new StringBuilder();
             if (folder.exists() && folder.isDirectory()) {
-                Arrays.stream(folder.listFiles())
-                        .sorted(Comparator.comparing(File::lastModified))
-                        .forEach(file -> fileList.append(MessageFormat.
-                                format("<li><a href=\"/files/serveFile?fileName={0}\">{0}</a> ({1} bytes)</li>\n",
-                                        file.getName(), file.length())));
+                File[] files = folder.listFiles();
+                if (files != null) {
+                    Arrays.stream(files)
+                            .sorted(Comparator.comparing(File::lastModified))
+                            .forEach(file -> fileList.append(MessageFormat.
+                                    format("<li><a href=\"/files/serveFile?fileName={0}\">{0}</a> ({1} bytes)</li>\n",
+                                            file.getName(), file.length())));
+                }
             }
             return MessageFormat.format(HTML, fileList.toString());
         }

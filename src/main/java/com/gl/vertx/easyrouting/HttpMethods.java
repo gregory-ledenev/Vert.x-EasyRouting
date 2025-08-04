@@ -24,6 +24,7 @@ SOFTWARE.
 
 package com.gl.vertx.easyrouting;
 
+
 import java.lang.annotation.*;
 import java.lang.reflect.Method;
 
@@ -31,6 +32,7 @@ import java.lang.reflect.Method;
  * Contains annotations for HTTP methods used in routing handlers. These annotations are used to mark methods that
  * handle specific HTTP requests.
  */
+@SuppressWarnings("unused")
 public class HttpMethods {
     /**
      * Marks a method as handling HTTP GET requests.
