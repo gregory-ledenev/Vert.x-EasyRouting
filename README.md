@@ -7,19 +7,35 @@ parameter binding and response processing. While inspired by SpringBoot's
 annotation-based routing patterns, it maintains a focused, lightweight
 implementation without attempting to replicate SpringBoot's entire feature set.
 
+EasyRouting enables you to build web applications effortlessly, even without
+prior knowledge of Vert.x. To get started, you only need a basic understanding
+of HTTP and general knowledge of Java.
+
+With just a single page of code, EasyRouting serves web pages and APIs,
+automatically converts incoming and outgoing data, handles errors, supports JWT
+authentication, and enforces role-based access control.
+
+This library is ideal for rapidly prototyping, testing, or learning the basics
+of web application development. It offers a minimal, annotation-driven API that
+simplifies the development process while still providing powerful features.
+
 ## Key Features
 
-- Annotation-based route definitions for all common HTTP methods (GET, POST,
+- No Vert.x knowledge required to build web applications
+- Minimalistic and easy-to-use API
+- Annotation-based handler definitions for all common HTTP methods (GET, POST,
   PUT, DELETE, PATCH)
-- Automatic parameter binding from request parameters and body
-- Form handling
+- Automatic parameter binding from request parameter, body, and form arguments
 - Support for optional parameters
+- Form handling
 - File upload/download handling
-- JSON object/array conversion
+- JSON objects conversion
+- Automatic incoming and outgoing data conversion
 - Automatic response processing
 - Redirect handling
 - Builtin JWT authentication and role-based authorization
 - Binding methods to HTTP error codes
+- Ready-to use application class for prototyping and testing
 
 ## Basic Usage
 
@@ -140,6 +156,7 @@ To create handler methods in your controller classes:
    of uploaded files to method arguments:
 
 ```java
+
 @POST("/files/uploadFile")
 public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @UploadsParam List<FileUpload> fileUploads) {
     return HandlerResult.saveFiles("files", fileUploads, "redirect:/");
@@ -148,7 +165,9 @@ public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @Upl
 
 7. **Handle form submissions** - Use the `@Form` annotation to bind form
    fields to method arguments:
+
 ```java
+
 @Form
 @GET("/loginForm")
 String loginForm(@Param("user") String user, @Param("password") String password) {
@@ -206,22 +225,27 @@ class TestApplication extends Application {
                 app.stop();
             }               
         });
+        app.handleCompletionHandlerFailure();
     }
 }
 ```
+
 ## JWT Support
 
-EasyRouting supports JWT authentication and role-based authorization. To apply it to a router - use 
+EasyRouting supports JWT authentication and role-based authorization. To apply
+it to a router - use
 `EasyRouting.applyJwtAuth()` method:
 
 ```java
-EasyRouting.applyJWTAuth(vertx, router, "/api/", <SECRET KEY>);
+EasyRouting.applyJWTAuth(vertx, router, "/api/",<SECRET KEY>);
 ```
 
-You may authorize certain methods to be accessed only by certain roles by specifying them as `requiredRoles` in the 
+You may authorize certain methods to be accessed only by certain roles by
+specifying them as `requiredRoles` in the
 `@GET`, `@POST` etc. annotations:
 
 ```java
+
 @HttpMethods.GET("/users/:id", requiredRoles = {"admin"})
 public User getUser(@Param("id") int userId) {
     // ...
@@ -230,9 +254,11 @@ public User getUser(@Param("id") int userId) {
 
 ## Error Handling
 
-EasyRouting supports error handling by binding HTTP error codes to handler methods using `@StatusCode` annotations:
+EasyRouting supports error handling by binding HTTP error codes to handler
+methods using `@StatusCode` annotations:
 
 ```java
+
 @StatusCode(401)
 @GET("/loginForm")
 public String loginForm(@OptionalParam("redirect") String redirect) {
