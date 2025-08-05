@@ -111,11 +111,11 @@ To create handler methods in your controller classes:
 
 1. **Create a method with an HTTP method annotation** - Use one of the following
    annotations to define the HTTP method and path:
-    - `@HttpMethods.GET(path)` - For HTTP GET requests
-    - `@HttpMethods.POST(path)` - For HTTP POST requests
-    - `@HttpMethods.PUT(path)` - For HTTP PUT requests
-    - `@HttpMethods.DELETE(path)` - For HTTP DELETE requests
-    - `@HttpMethods.PATCH(path)` - For HTTP PATCH requests
+    - `@GET(path)` - For HTTP GET requests
+    - `@POST(path)` - For HTTP POST requests
+    - `@PUT(path)` - For HTTP PUT requests
+    - `@DELETE(path)` - For HTTP DELETE requests
+    - `@PATCH(path)` - For HTTP PATCH requests
 
 2. **Define path parameters** - Use `:paramName` syntax in your path to define
    path parameters:
