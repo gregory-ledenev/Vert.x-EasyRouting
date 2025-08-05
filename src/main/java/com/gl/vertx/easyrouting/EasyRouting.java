@@ -396,7 +396,11 @@ public class EasyRouting {
                         otherParamCount++;
                         hasBodyParam = true;
                         paramNames.add(param.value());
-                    } else if (paramAnnotation instanceof UploadsParam) {
+                    } else if (paramAnnotation instanceof PathParam param) {
+                        otherParamCount++;
+                        paramNames.add(param.value());
+                    }
+                    else if (paramAnnotation instanceof UploadsParam) {
                         otherParamCount++;
                         paramNames.add("uploads");
                     }
@@ -427,6 +431,8 @@ public class EasyRouting {
                 result.add(convertBody(parameterTypes[i], body));
             } else if (parameter.getAnnotation(UploadsParam.class) != null) {
                 result.add(ctx.fileUploads());
+            } else if (parameter.getAnnotation(PathParam.class) != null) {
+                result.add(ctx.normalizedPath());
             } else {
                 OptionalParam optionalParam = parameter.getAnnotation(OptionalParam.class);
                 if (optionalParam != null) {

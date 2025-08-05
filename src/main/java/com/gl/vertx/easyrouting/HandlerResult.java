@@ -25,6 +25,7 @@ SOFTWARE.
 package com.gl.vertx.easyrouting;
 
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.http.impl.MimeMapping;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.FileUpload;
@@ -154,6 +155,15 @@ public class HandlerResult<T> {
         ));
     }
 
+    public static HandlerResult<String> file(String content, String fileName) {
+        Objects.requireNonNull(content);
+        Objects.requireNonNull(fileName);
+
+        return new HandlerResult<>(content, Map.of(
+                CONTENT_TYPE, getMimeType(fileName))
+        );
+    }
+
     /**
      * Creates a HandlerResult for sending a file from a Path.
      *
@@ -174,7 +184,7 @@ public class HandlerResult<T> {
      */
     public static String getMimeType(String fileName) {
         FileNameMap fileNameMap = URLConnection.getFileNameMap();
-        String mimeType = fileNameMap.getContentTypeFor(fileName);
+        String mimeType = MimeMapping.getMimeTypeForFilename(fileName);
         if (mimeType == null)
             mimeType = CT_APPLICATION_OCTET_STREAM;
 
