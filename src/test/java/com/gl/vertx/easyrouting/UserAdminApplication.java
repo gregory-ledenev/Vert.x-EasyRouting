@@ -28,7 +28,19 @@ import static com.gl.vertx.easyrouting.HttpMethods.*;
  * - GET /unauthenticated - Returns 401 error for unauthorized access
  */
 @SuppressWarnings("unused")
+
 public class UserAdminApplication extends Application {
+
+    public static void main(String[] args) {
+        new UserAdminApplication(new LoginService(),  new UserService()).start();
+    }
+
+    UserAdminApplication(LoginService loginService, UserService userService) {
+        super(JWT_SECRET, "/api/*"); // init JWT authentication
+        this.userService = userService;
+        this.loginService = loginService;
+    }
+
     @POST("/login")
     HandlerResult<String> login(@BodyParam("path") LoginData loginData) {
         String token = loginService.login(loginData.username(), loginData.password());
@@ -64,17 +76,6 @@ public class UserAdminApplication extends Application {
     @GET("/unauthenticated")
     HandlerResult<?> unauthenticated(@OptionalParam("redirect") String redirect) {
         return new HandlerResult<>("You are not unauthenticated to access this: " + redirect, 401);
-    }
-
-    public static void main(String[] args) {
-        UserAdminApplication app = new UserAdminApplication(new LoginService(),  new UserService());
-        app.start();
-    }
-
-    UserAdminApplication(LoginService loginService, UserService userService) {
-        super(JWT_SECRET, "/api/*");
-        this.userService = userService;
-        this.loginService = loginService;
     }
 
     private final LoginService loginService;
