@@ -66,7 +66,7 @@ public class EasyRouting {
     private static final Logger logger = LoggerFactory.getLogger(EasyRouting.class);
 
     public static final String REDIRECT = "redirect:";
-    private static final String ERROR_HANDLING_ANNOTATED_METHOD = "Error handling annotated method: \"{0}\" for parameters: \"{1}\" {2}";
+    private static final String ERROR_HANDLING_ANNOTATED_METHOD = "Error handling annotated method: {0}({1}). Error: {2}";
 
     /**
      * Sets up HTTP request handlers for all supported HTTP methods (GET, POST, DELETE, PUT, PATCH) based on annotated
@@ -117,11 +117,6 @@ public class EasyRouting {
                     String originalUri = ctx.request().uri();
                     ctx.redirect(redirect + "?redirect=" + URLEncoder.encode(originalUri, StandardCharsets.UTF_8));
                     return;
-                } else if (httpEx.getStatusCode() == 401) {
-                    ctx.response()
-                            .setStatusCode(401)
-                            .end("Unauthorized access to: " + ctx.normalizedPath() + " Error: " + httpEx.getMessage());
-                    return;
                 }
             }
             ctx.next();
@@ -135,16 +130,13 @@ public class EasyRouting {
         for (Method method : target.getClass().getDeclaredMethods()) {
             StatusCode statusCodeAnnotation = method.getAnnotation(StatusCode.class);
             if (statusCodeAnnotation != null && statusCodeAnnotation.value() == statusCode) {
-                // Get supported HTTP method annotation (GET, POST, etc.)
-                for (Class<? extends Annotation> httpMethod : Arrays.asList(HttpMethods.GET.class, HttpMethods.POST.class, HttpMethods.DELETE.class, HttpMethods.PUT.class, HttpMethods.PATCH.class)) {
-                    Annotation methodAnnotation = method.getAnnotation(httpMethod);
-                    if (methodAnnotation != null) {
-                        try {
-                            result = (String) methodAnnotation.annotationType().getMethod("value").invoke(methodAnnotation);
-                        } catch (Exception e) {
-                            LoggerFactory.getLogger(target.getClass()).error("Failed to get redirect path for method: " + methodAnnotation, e);
-                            break all;
-                        }
+                Annotation methodAnnotation = method.getAnnotation(HttpMethods.GET.class);
+                if (methodAnnotation != null) {
+                    try {
+                        result = (String) methodAnnotation.annotationType().getMethod("value").invoke(methodAnnotation);
+                    } catch (Exception e) {
+                        LoggerFactory.getLogger(target.getClass()).error("Failed to get redirect path for method: " + methodAnnotation, e);
+                        break all;
                     }
                 }
             }
@@ -306,7 +298,8 @@ public class EasyRouting {
                         ctx.request().method() == HttpMethod.POST ? ctx.request().formAttributes() : null,
                         target);
                 if (handlerMethod == null) {
-                    ctx.response().setStatusCode(404).end("No handler method for: \"" + annotation + "\" and parameters: " + ctx.request().params());
+                    logger.error("No handler method for: \"" + annotation + "\" and parameters: " + ctx.request().params());
+                    ctx.response().setStatusCode(404).end();
                 } else if (checkRequiredRoles(ctx, handlerMethod.method)) {
                     if (handlerMethod.hasBodyParam) {
                         // Use the already parsed body instead of reading it again
@@ -328,24 +321,23 @@ public class EasyRouting {
                         processHandlerResult(handlerMethod.method(), ctx, result);
                     }
                 } else {
-                    ctx.response().setStatusCode(403).end("Forbidden");
+                    throw new HttpException(403, "Access denied"); // exception to let failure handler handle it
                 }
             } catch (HttpException e) {
-                ctx.response().setStatusCode(e.getStatusCode()).end(e.getPayload());
-                LoggerFactory.getLogger(target.getClass()).
-                        error(MessageFormat.format(ERROR_HANDLING_ANNOTATED_METHOD,
-                                annotation,
-                                ctx.request().params().names(),
-                                e));
+                errorHandlerInvocation(annotation, ctx.request().params().names(), e);
+                throw e;
             } catch (Exception e) {
-                ctx.response().setStatusCode(500).end("Internal Server Error");
-                LoggerFactory.getLogger(target.getClass()).
-                        error(MessageFormat.format(ERROR_HANDLING_ANNOTATED_METHOD,
-                                annotation,
-                                ctx.request().params().names(),
-                                e));
+                errorHandlerInvocation(annotation, ctx.request().params().names(), e);
+                throw new HttpException(500, e);
             }
         };
+    }
+
+    private static void errorHandlerInvocation(Annotation annotation, Set<String> parameterNames, Exception exception) {
+        logger.error(MessageFormat.format(ERROR_HANDLING_ANNOTATED_METHOD,
+                annotation,
+                String.join(", ", parameterNames),
+                exception));
     }
 
     record MethodResult(Method method, String[] parameterNames, boolean hasBodyParam) {
@@ -436,9 +428,9 @@ public class EasyRouting {
             } else {
                 OptionalParam optionalParam = parameter.getAnnotation(OptionalParam.class);
                 if (optionalParam != null) {
-                    result.add(convertValue(parameterTypes[i], optionalParam.defaultValue()));
+                    result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters, optionalParam.defaultValue()));
                 } else {
-                    result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters));
+                    result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters, optionalParam.defaultValue()));
                 }
             }
         }
@@ -478,8 +470,9 @@ public class EasyRouting {
         throw new IllegalArgumentException("Unsupported body type: " + parameterType);
     }
 
-    private static Object convertValue(String parameterName, Class<?> parameterType, MultiMap parameters) {
-        return convertValue(parameterType, parameters.get(parameterName));
+    private static Object convertValue(String parameterName, Class<?> parameterType, MultiMap parameters, String defaultValue) {
+        String value = parameters.get(parameterName);
+        return convertValue(parameterType, value != null ? value : defaultValue);
     }
 
     private static Object convertValue(Class<?> parameterType, String value) {

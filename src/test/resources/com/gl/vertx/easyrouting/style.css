@@ -1,3 +1,4 @@
+/* Existing CSS from previous examples */
 body {
     font-family: Arial, sans-serif;
     background-color: #f4f4f4;
@@ -26,14 +27,14 @@ h1, h2 {
     gap: 10px;
 }
 
-#user-form input {
+#user-form input, #login-form input {
     flex-grow: 1;
     padding: 10px;
     border: 1px solid #ddd;
     border-radius: 4px;
 }
 
-#user-form button {
+#user-form button, #login-form button {
     padding: 10px 20px;
     border: none;
     background-color: #007bff;
@@ -42,7 +43,7 @@ h1, h2 {
     cursor: pointer;
 }
 
-#user-form button:hover {
+#user-form button:hover, #login-form button:hover {
     background-color: #0056b3;
 }
 
@@ -90,4 +91,37 @@ h1, h2 {
 
 .delete-button:hover {
     background-color: #c82333;
+}
+
+/* New CSS for auth-related elements */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+#signout-button {
+    background-color: #6c757d;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#signout-button:hover {
+    background-color: #5a6268;
+}
+
+#login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 400px;
+    margin: 20px auto;
+}
+
+#login-form button {
+    width: 100%;
 }

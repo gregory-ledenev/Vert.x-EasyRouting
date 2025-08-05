@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
+import java.io.InputStream;
 import java.net.FileNameMap;
 import java.net.URLConnection;
 import java.nio.file.Files;
@@ -62,6 +63,9 @@ public class HandlerResult<T> {
     public static final String CT_TEXT_HTML = "text/html";
     public static final String CT_APPLICATION_JSON = "application/json";
     public static final String CT_APPLICATION_OCTET_STREAM = "application/octet-stream";
+    static final String INDEX_HTML = "index.html";
+    public static final String ROOT_PATH = "/";
+    public static final String PARENT_PATH = "..";
 
     private final T result;
     private Map<String, String> headers = new HashMap<>();
@@ -155,6 +159,13 @@ public class HandlerResult<T> {
         ));
     }
 
+    /**
+     * Creates a HandlerResult for sending a file from a string.
+     *
+     * @param content  The string containing file data
+     * @param fileName The name of the file to be sent
+     * @return HandlerResult configured for file download
+     */
     public static HandlerResult<String> file(String content, String fileName) {
         Objects.requireNonNull(content);
         Objects.requireNonNull(fileName);
@@ -164,6 +175,113 @@ public class HandlerResult<T> {
         );
     }
 
+    /**
+     * Creates a HandlerResult for sending a file from a class resource. This method attempts to load
+     * a file from the resources associated with the specified class. If the requested name is "/",
+     * it defaults to "index.html".
+     *
+     * @param clazz The class used to locate the resource
+     * @param name  The name/path of the resource to load
+     * @return HandlerResult configured for file response. Returns 403 status if path contains "..",
+     * 404 status if file not found, or file content if successful
+     */
+    public static HandlerResult<String> fileFromResource(Class<?> clazz, String name) {
+        Objects.requireNonNull(clazz);
+        Objects.requireNonNull(name);
+
+        if (name.contains(PARENT_PATH))
+            return new HandlerResult<>("Forbidden", 403);
+
+        String file;
+        if (name.equals(ROOT_PATH))
+            file = INDEX_HTML;
+        else
+            file = name.substring(name.lastIndexOf(ROOT_PATH) + 1);
+
+        try (InputStream in = clazz.getResourceAsStream(file)) {
+            if (in != null)
+                return HandlerResult.file(new String(in.readAllBytes()), file);
+            else
+                return fileNotFound(file);
+        } catch (IOException e) {
+            return failedToReadFile(file);
+        }
+    }
+
+    /**
+     * Creates a HandlerResult for sending a file from a specified folder. This method attempts to load
+     * a file from the given folder path. If the requested name is "/", it defaults to "index.html".
+     *
+     * @param folder The base folder path where the file should be loaded from
+     * @param name   The name/path of the file to load
+     * @return HandlerResult configured for file response. Returns 403 status if path contains "..",
+     * 404 status if file not found, or file content if successful
+     */
+    public static HandlerResult<String> fileFromFolder(Path folder, String name) {
+        Objects.requireNonNull(folder);
+        Objects.requireNonNull(name);
+
+        if (name.contains(PARENT_PATH))
+            return new HandlerResult<>("Forbidden", 403);
+
+        String file;
+        if (name.equals(ROOT_PATH))
+            file = INDEX_HTML;
+        else
+            file = name.substring(name.lastIndexOf(ROOT_PATH) + 1);
+
+        Path filePath = folder.resolve(file);
+        try {
+            if (Files.exists(filePath))
+                return HandlerResult.file(Files.readString(filePath), file);
+            else
+                return fileNotFound(file);
+        } catch (IOException e) {
+            return failedToReadFile(file);
+        }
+    }
+
+    /**
+     * Creates a HandlerResult that performs a redirect to the specified location.
+     * This method creates a response that will redirect the client to a new URL.
+     *
+     * @param location The URL or path to redirect to
+     * @return HandlerResult configured for redirect response
+     */
+    public static HandlerResult<String> redirect(String location) {
+        return new HandlerResult<>(REDIRECT + location);
+    }
+
+    /**
+     * Creates a HandlerResult for a failed file read operation.
+     *
+     * @param file The name of the file that failed to be read
+     * @return HandlerResult with error message and 500 status code
+     */
+    public static HandlerResult<String> failedToReadFile(String file) {
+        return new HandlerResult<>("Failed to read file: " + file, 500);
+    }
+
+    /**
+     * Creates a HandlerResult for an invalid login attempt.
+     * This method returns a HandlerResult with a 401 (Unauthorized) status code
+     * and an appropriate error message.
+     *
+     * @return HandlerResult configured with error message and 401 status code
+     */
+    public static HandlerResult<String> invalidLogin() {
+        return new HandlerResult<>("Invalid login or password", 401);
+    }
+
+    /**
+     * Creates a HandlerResult for a file not found condition.
+     *
+     * @param file The name of the file that was not found
+     * @return HandlerResult with error message and 404 status code
+     */
+    public static HandlerResult<String> fileNotFound(String file) {
+        return new HandlerResult<>("File not found: " + file, 404);
+    }
     /**
      * Creates a HandlerResult for sending a file from a Path.
      *
@@ -286,35 +404,32 @@ public class HandlerResult<T> {
         try {
             headers.forEach(ctx.response()::putHeader);
 
-            if (getStatusCode() == 200) {
-                if (result instanceof Path filePath) {
-                    ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_OCTET_STREAM);
-                    ctx.response().putHeader(CONTENT_DISPOSITION, MessageFormat.format("attachment; filename=\"{0}\"", filePath.getFileName().toString()));
-                    ctx.response().sendFile(filePath.toString())
-                            .onSuccess(v -> ctx.response())
-                            .onFailure(ctx::fail);
-                } else if (result instanceof Buffer buffer) {
-                    ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_OCTET_STREAM);
-                    ctx.response().send(buffer);
-                } else if (result instanceof JsonObject jsonObject) {
-                    sendJsonResponse(ctx, jsonObject.encodePrettily());
-                } else if (result instanceof JsonArray jsonArray) {
-                    sendJsonResponse(ctx, jsonArray.encodePrettily());
-                } else if (result instanceof Map<?, ?> map) {
-                    handleMapResult(ctx, map);
-                } else if (result instanceof Collection<?> collection) {
-                    handleCollectionResult(ctx, collection);
-                } else if (result != null && result.getClass().isArray()) {
-                    handleArrayResult(ctx, result);
-                } else if (result instanceof Number || result instanceof Boolean) {
-                    sendPlainTextResponse(ctx, result.toString());
-                } else if (result instanceof String string) {
-                    handleStringResult(ctx, string);
-                } else {
-                    handleOtherResult(ctx, result);
-                }
+            ctx.response().setStatusCode(statusCode);
+            if (result instanceof Path filePath) {
+                ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_OCTET_STREAM);
+                ctx.response().putHeader(CONTENT_DISPOSITION, MessageFormat.format("attachment; filename=\"{0}\"", filePath.getFileName().toString()));
+                ctx.response().sendFile(filePath.toString())
+                        .onSuccess(v -> ctx.response())
+                        .onFailure(ctx::fail);
+            } else if (result instanceof Buffer buffer) {
+                ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_OCTET_STREAM);
+                ctx.response().send(buffer);
+            } else if (result instanceof JsonObject jsonObject) {
+                sendJsonResponse(ctx, jsonObject.encodePrettily());
+            } else if (result instanceof JsonArray jsonArray) {
+                sendJsonResponse(ctx, jsonArray.encodePrettily());
+            } else if (result instanceof Map<?, ?> map) {
+                handleMapResult(ctx, map);
+            } else if (result instanceof Collection<?> collection) {
+                handleCollectionResult(ctx, collection);
+            } else if (result != null && result.getClass().isArray()) {
+                handleArrayResult(ctx, result);
+            } else if (result instanceof Number || result instanceof Boolean) {
+                sendPlainTextResponse(ctx, result.toString());
+            } else if (result instanceof String string) {
+                handleStringResult(ctx, string);
             } else {
-                ctx.response().setStatusCode(getStatusCode()).end();
+                handleOtherResult(ctx, result);
             }
         } catch (HttpException e) {
             logger.error("Error sending result: ", e);
