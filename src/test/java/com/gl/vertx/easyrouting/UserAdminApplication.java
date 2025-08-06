@@ -32,16 +32,18 @@ import static com.gl.vertx.easyrouting.HttpMethods.*;
 public class UserAdminApplication extends Application {
 
     public static void main(String[] args) {
-        new UserAdminApplication(new LoginService(),  new UserService()).start();
+        new UserAdminApplication(new LoginService(),  new UserService()).
+                jwtAuth(JWT_SECRET, "/api/*").
+                sslWithJks("keystore", "1234567890").
+                start(8443);
     }
 
     UserAdminApplication(LoginService loginService, UserService userService) {
-//        super(JWT_SECRET, "/api/*"); // init JWT authentication
         this.userService = userService;
         this.loginService = loginService;
     }
 
-    @POST("/login") @Login
+    @POST("/login") @NotNullResult(value = "Invalid credentials", statusCode = 401)
     String login(@BodyParam("path") LoginData loginData) {
         return loginService.login(loginData.username(), loginData.password());
     }

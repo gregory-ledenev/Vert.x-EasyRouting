@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const cancelButton = document.getElementById('cancel-button');
     const signoutButton = document.getElementById('signout-button');
 
-    const API_URL = 'http://localhost:8080/api/users';
+    const API_URL = 'https://localhost:8443/api/users';
     let isEditing = false;
 
     // Helper function to make API calls with the JWT

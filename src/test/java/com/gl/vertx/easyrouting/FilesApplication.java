@@ -39,7 +39,7 @@ public class FilesApplication extends Application {
 
     @HttpMethods.POST(value = "/files/uploadFile")
     public Result<String> handleUploads(@Param("fileCount") int fileCount, @UploadsParam List<FileUpload> fileUploads) {
-        return Result.saveFiles("files", fileUploads, "redirect:/");
+        return Result.saveFiles(fileUploads, "files", "redirect:/");
     }
 
     public static final String HTML = """

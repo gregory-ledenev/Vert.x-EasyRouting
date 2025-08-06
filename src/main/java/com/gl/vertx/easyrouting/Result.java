@@ -45,6 +45,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.text.MessageFormat;
 import java.util.*;
+import java.util.function.BiFunction;
 
 import static com.gl.vertx.easyrouting.EasyRouting.REDIRECT;
 
@@ -109,30 +110,80 @@ public class Result<T> {
     /**
      * Creates a HandlerResult that saves uploaded files and performs a redirect.
      *
-     * @param folder      The destination folder for uploaded files
-     * @param fileUploads List of file uploads to process
+     * @param files List of file uploads to process
+     * @param toFolder    The destination folder for uploaded files
      * @param redirect    The URL to redirect to after saving files
      * @return HandlerResult configured for file saving and redirect
      */
-    public static Result<String> saveFiles(String folder, List<FileUpload> fileUploads, String redirect) {
-        Objects.requireNonNull(folder);
-        Objects.requireNonNull(fileUploads);
+    public static Result<String> saveFiles(List<FileUpload> files, String toFolder, String redirect) {
+        Objects.requireNonNull(files);
+        Objects.requireNonNull(toFolder);
 
         return new Result<>(redirect) {
 
             @Override
             public void handle(RoutingContext ctx) {
-                for (FileUpload fileUpload : fileUploads) {
+                for (FileUpload fileUpload : files) {
                     String uploadedFileName = fileUpload.uploadedFileName();
                     String fileName = fileUpload.fileName();
                     if (! fileName.isEmpty()) {
                         try {
-                            Files.copy(Path.of(uploadedFileName), Path.of(folder, fileName), StandardCopyOption.REPLACE_EXISTING);
+                            Files.copy(Path.of(uploadedFileName), Path.of(toFolder, fileName), StandardCopyOption.REPLACE_EXISTING);
                         } catch (Exception e) {
                             logger.error("Failed to save uploaded file: " + fileName, e);
                             ctx.response().setStatusCode(400).end("Failed to save uploaded file: " + fileName);
                             return;
                         }
+                        fileUpload.delete();
+                    } else {
+                        logger.warn("Uploaded file is missing");
+                        ctx.response().setStatusCode(400).end("Uploaded file is missing");
+                        return;
+                    }
+                }
+
+                super.handle(ctx);
+            }
+        };
+    }
+
+    /**
+     * Saves a list of uploaded files using a provided file-saving function and performs a redirect.
+     * Each file upload in the list is passed to the provided file-saving function, which is
+     * responsible for handling the file-saving logic. If the save operation is successful,
+     * the uploaded file is deleted. If an error occurs during saving, an appropriate response
+     * is sent to indicate failure.
+     *
+     * @param files       The list of uploaded files to save.
+     * @param fileSaver   A function that performs the file-saving operation.
+     *                    It takes a {@code Path} representing the uploaded file's path
+     *                    and a {@code String} representing the file's name, and returns
+     *                    a {@code Boolean} indicating success or failure.
+     * @param redirect    The URL to redirect to after processing the files.
+     * @return A {@code Result<String>} that handles the file-saving process and subsequent redirect.
+     */
+    public static Result<String> saveFiles(List<FileUpload> files, BiFunction<Path, String, Boolean> fileSaver, String redirect) {
+        Objects.requireNonNull(files);
+        Objects.requireNonNull(fileSaver);
+
+        return new Result<>(redirect) {
+
+            @Override
+            public void handle(RoutingContext ctx) {
+                for (FileUpload fileUpload : files) {
+                    String uploadedFileName = fileUpload.uploadedFileName();
+                    String fileName = fileUpload.fileName();
+                    if (! fileName.isEmpty()) {
+                        boolean saved = false;
+                        try {
+                            saved = fileSaver.apply(Path.of(uploadedFileName), fileName);
+                        } catch (Exception e) {
+                            logger.error("Failed to save uploaded file: " + fileName, e);
+                            ctx.response().setStatusCode(400).end("Failed to save uploaded file: " + fileName);
+                            return;
+                        }
+                        if (saved)
+                            fileUpload.delete();
                     } else {
                         logger.warn("Uploaded file is missing");
                         ctx.response().setStatusCode(400).end("Uploaded file is missing");
@@ -461,10 +512,7 @@ public class Result<T> {
     private void handleNullResult(RoutingContext ctx) {
         if (annotations != null) {
             for (Annotation annotation : annotations) {
-                if (annotation instanceof Login) {
-                    invalidLogin().handle(ctx);
-                    return;
-                } else if (annotation instanceof NotNullResult notNullResult) {
+                if (annotation instanceof NotNullResult notNullResult) {
                     ctx.response().setStatusCode(notNullResult.statusCode()).end(notNullResult.value());
                     return;
                 }
@@ -520,13 +568,7 @@ public class Result<T> {
                     } else if (annotation instanceof FileFromFolder fileFromFolder) {
                         Result.fileFromFolder(Path.of(fileFromFolder.value()), string).handle(ctx);
                         return;
-                    } else if (annotation instanceof Login) {
-                        if (string.isEmpty()) {
-                            invalidLogin().handle(ctx);
-                            return;
-                        }
                     }
-
                 }
             }
 

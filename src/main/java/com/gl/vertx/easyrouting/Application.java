@@ -27,12 +27,16 @@ package com.gl.vertx.easyrouting;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpServerOptions;
+import io.vertx.core.net.JksOptions;
+import io.vertx.core.net.PemKeyCertOptions;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.handler.BodyHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Scanner;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
@@ -60,14 +64,17 @@ public class Application {
     private int port;
     private boolean readInput;
     private Consumer<Application> completionHandler;
-    private final String jwtSecret;
-    private final String[] jwtRoutes;
+    private String jwtSecret;
+    private String[] jwtRoutes;
     private BiConsumer<Application, Throwable> failureHandler;
 
     private Throwable completionHandlerFailure;
     private ApplicationVerticle applicationVerticle;
     private Vertx vertx;
     private Thread inputThread;
+    private String host = "localhost";
+    private JksOptions jksOptions;
+    private PemKeyCertOptions pemKeyCertOptions;
 
     class ApplicationVerticle extends AbstractVerticle {
         @Override
@@ -80,26 +87,97 @@ public class Application {
                 for (String jwtRoute : jwtRoutes)
                     EasyRouting.applyJWTAuth(vertx, router, jwtRoute, jwtSecret);
 
-            EasyRouting.setupHandlers(router, Application.this);
+            EasyRouting.setupController(router, Application.this);
 
             createHttpServer(startPromise, router, port);
         }
     }
 
-    public Application(String jwtSecret, String... jwtRoutes) {
-        this.jwtSecret = jwtSecret;
-        this.jwtRoutes = jwtRoutes;
+    @SuppressWarnings("unchecked")
+    protected <T extends Application> T self() {
+        return (T) this;
     }
 
-    public Application() {
-        this(null, (String[]) null);
+    /**
+     * Configures the application to use JWT-based authentication.
+     * Sets up JWT authentication for a passed JWT secret and defines the routes
+     * where JWT authentication should be applied.
+     *
+     * @param jwtSecret the secret key used to sign and verify JWT tokens
+     * @param jwtRoutes routes or endpoints requiring JWT authentication
+     * @return the current {@code Application} instance, allowing for method chaining
+     */
+    public <T extends Application> T jwtAuth(String jwtSecret, String... jwtRoutes) {
+        this.jwtSecret = jwtSecret;
+        this.jwtRoutes = jwtRoutes;
+
+        return self();
+    }
+
+    public <T extends Application> T sslWithJks(String jksKeyStorePath, String jksKeyStorePassword) {
+        Objects.requireNonNull(jksKeyStorePath);
+        Objects.requireNonNull(jksKeyStorePassword);
+
+        this.jksOptions = new JksOptions()
+                .setPath(jksKeyStorePath)
+                .setPassword(jksKeyStorePassword);
+
+        if (pemKeyCertOptions != null) {
+            logger.warn("PEM key and certificate options are ignored when when JKS key store options are used");
+            pemKeyCertOptions = null;
+        }
+
+        return self();
+    }
+
+    public <T extends Application> T sslWithPem(String keyPath, String certPath) {
+        Objects.requireNonNull(keyPath);
+        Objects.requireNonNull(certPath);
+
+        if (jksOptions != null) {
+            logger.warn("JKS options are ignored when when PEM key and certificate options are used");
+            jksOptions = null;
+        }
+
+        this.pemKeyCertOptions = new PemKeyCertOptions()
+                .setKeyPath(keyPath)
+                .setCertPath(certPath);
+
+        return self();
+    }
+
+    /**
+     * Registers a completion handler to be executed when the application starts successfully.
+     * The handler receives the current application instance as a parameter.
+     *
+     * @param completionHandler a {@code Consumer} that processes the application instance upon successful startup
+     * @return the current {@code Application} instance, allowing for method chaining
+     */
+    public <T extends Application> T onStartCompletion(Consumer<Application> completionHandler) {
+        this.completionHandler = completionHandler;
+        return self();
+    }
+
+    /**
+     * Registers a failure handler that is executed when an application startup failure occurs.
+     * The failure handler receives the current application instance and the related {@code Throwable}.
+     *
+     * @param failureHandler a {@code BiConsumer} accepting the application instance and the exception
+     *                       that caused the startup failure
+     * @return the current {@code Application} instance, allowing for method chaining
+     */
+    public <T extends Application> T onStartFailure(BiConsumer<Application, Throwable> failureHandler) {
+        this.failureHandler = failureHandler;
+        return self();
     }
 
     /**
      * Starts the application on the 8080.
      */
-    public void start() {
-        start(8080, null);
+    public <T extends Application> T start() {
+        start(8080);
+
+        return self();
     }
 
     /**
@@ -107,32 +185,22 @@ public class Application {
      *
      * @param port the port number on which to start the server
      */
-    public void start(int port) {
-        start(port, null);
+    public <T extends Application> T start(int port) {
+        start(port, "localhost");
+        return self();
     }
 
     /**
      * Starts the application on the specified port.
      *
      * @param port              the port number on which to start the server
-     * @param completionHandler a callback function that will be called when the server starts successfully
+     * @param host              the hostname or IP address to which the server will bind (e.g., "localhost" or "0.0.0.0")
      */
-    public void start(int port, Consumer<Application> completionHandler) {
-        start(port, completionHandler, null);
-    }
+    public <T extends Application> T start(int port, String host) {
+        Objects.requireNonNull(host);
 
-    /**
-     * Starts the application on the specified port.
-     *
-     * @param port              the port number on which to start the server
-     * @param completionHandler a callback function that will be called when the server starts successfully. You may put
-     *                          your testing code to that handler to ensure it runs only when the server is ready.
-     * @param failureHandler    a callback function that will be called when the server fails to start
-     */
-    public void start(int port, Consumer<Application> completionHandler, BiConsumer<Application, Throwable> failureHandler) {
         if (applicationVerticle == null) {
-            this.completionHandler = completionHandler;
-            this.failureHandler = failureHandler;
+            this.host = host;
             this.port = port;
             applicationVerticle = new ApplicationVerticle();
             vertx = Vertx.vertx();
@@ -141,6 +209,8 @@ public class Application {
         } else {
             logger.warn("Application is already running on port: " + this.port);
         }
+
+        return self();
     }
 
     /**
@@ -289,19 +359,29 @@ public class Application {
      * If the application is running when the shutdown hook is triggered, it will initiate a graceful
      * shutdown of the application by calling the stop() method.
      */
-    public void handleShutdown() {
+    public Application handleShutdown() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (isRunning()) {
                 System.out.println("Shutting down...");
                 stop();
             }
         }));
+
+        return this;
     }
 
     private void createHttpServer(Promise<Void> startPromise, Router router, int port) {
-        vertx.createHttpServer()
+        HttpServerOptions options = new HttpServerOptions();
+
+        if (jksOptions != null) {
+            options.setSsl(true).setKeyCertOptions(jksOptions);
+        } else if (pemKeyCertOptions != null) {
+            options.setSsl(true).setKeyCertOptions(pemKeyCertOptions);
+        }
+
+        vertx.createHttpServer(options)
                 .requestHandler(router)
-                .listen(port)
+                .listen(port, host)
                 .onComplete(result -> {
                     if (result.succeeded()) {
                         logger.info("Server started on port: " + port);

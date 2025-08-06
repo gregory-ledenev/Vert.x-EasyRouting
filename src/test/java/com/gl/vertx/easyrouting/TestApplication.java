@@ -31,6 +31,12 @@ public class TestApplication {
             return JWTUtil.generateToken(getVertx(), user, Arrays.asList(role.split(",")), JWT_PASSWORD);
         }
 
+        @Form
+        @POST(value = "/loginNotAnnotated")
+        String loginNotAnnotated(String user, String password, String role) {
+            return JWTUtil.generateToken(getVertx(), user, Arrays.asList(role.split(",")), JWT_PASSWORD);
+        }
+
         @StatusCode(401)
         @GET(value = "/loginForm")
         String loginForm(@OptionalParam("redirect") String redirect) {
@@ -53,37 +59,39 @@ public class TestApplication {
         }
 
         public TestApplicationImpl() {
-            super(JWT_PASSWORD, "/api/*");
+            jwtAuth(JWT_PASSWORD, "/api/*");
         }
 
         public static void main(String[] args) {
-            TestApplicationImpl app = new TestApplicationImpl();
-            app.handleShutdown();
-            app.start(8080, Application::waitForInput);
+            TestApplicationImpl app = new TestApplicationImpl()
+                    .onStartCompletion(Application::waitForInput)
+                    .handleShutdown()
+                    .start(8080);
         }
     }
 
     @Test
     void testApplication() throws Throwable {
-        TestApplicationImpl app = new TestApplicationImpl();
-        app.start(8080, application -> {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
 
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("http://localhost:8080/"))
-                    .GET()
-                    .build();
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/"))
+                            .GET()
+                            .build();
 
-            try {
-                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                assertEquals(200, response.statusCode());
-                assertEquals("Hello from TestApplication!", response.body());
-            } catch (Throwable e) {
-                throw new RuntimeException(e);
-            } finally {
-                application.stop();
-            }
-        });
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("Hello from TestApplication!", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
 
         app.handleCompletionHandlerFailure();
     }
@@ -93,154 +101,187 @@ public class TestApplication {
 
     @Test
     void testFormSubmit() throws Throwable {
-        TestApplicationImpl app = new TestApplicationImpl();
-        app.start(8080, application -> {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
 
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("http://localhost:8080/login?role=user"))
-                    .header("Content-Type", "application/x-www-form-urlencoded")
-                    .POST(HttpRequest.BodyPublishers.ofString("user=testUser&password=testPass"))
-                    .build();
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/login?role=user"))
+                            .header("Content-Type", "application/x-www-form-urlencoded")
+                            .POST(HttpRequest.BodyPublishers.ofString("user=testUser&password=testPass"))
+                            .build();
 
-            try {
-                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                assertEquals(200, response.statusCode());
-                System.out.println(response.body());
-            } catch (Throwable e) {
-                throw new RuntimeException(e);
-            } finally {
-                application.stop();
-            }
-        });
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testFormSubmitNotAnnotated() throws Throwable {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/loginNotAnnotated?role=user"))
+                            .header("Content-Type", "application/x-www-form-urlencoded")
+                            .POST(HttpRequest.BodyPublishers.ofString("user=testUser&password=testPass"))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
 
         app.handleCompletionHandlerFailure();
     }
 
     @Test
     void testUnauthenticated() throws Throwable {
-        TestApplicationImpl app = new TestApplicationImpl();
-        app.start(8080, application -> {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
 
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("http://localhost:8080/api/"))
-                    .GET()
-                    .build();
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/api/"))
+                            .GET()
+                            .build();
 
-            try {
-                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                assertEquals(302, response.statusCode()); // redirect /loginForm
-                System.out.println(response.body());
-            } catch (Throwable e) {
-                throw new RuntimeException(e);
-            } finally {
-                application.stop();
-            }
-        });
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(302, response.statusCode()); // redirect /loginForm
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                })
+                .start(8080);
 
         app.handleCompletionHandlerFailure();
     }
 
     @Test
     void testAuthorized() throws Throwable {
-        TestApplicationImpl app = new TestApplicationImpl();
-        app.start(8080, application -> {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
 
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                    .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                    .uri(URI.create("http://localhost:8080/api/"))
-                    .GET()
-                    .build();
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
+                            .uri(URI.create("http://localhost:8080/api/"))
+                            .GET()
+                            .build();
 
-            try {
-                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                assertEquals(200, response.statusCode());
-                assertEquals("Hello protected API!", response.body());
-            } catch (Throwable e) {
-                throw new RuntimeException(e);
-            } finally {
-                application.stop();
-            }
-        });
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("Hello protected API!", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                })
+                .start(8080);
 
         app.handleCompletionHandlerFailure();
     }
 
     @Test
     void testAuthorizedForUserAndAdmin() throws Throwable {
-        TestApplicationImpl app = new TestApplicationImpl();
-        app.start(8080, application -> {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
 
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                    .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                    .uri(URI.create("http://localhost:8080/api/user/"))
-                    .GET()
-                    .build();
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
+                            .uri(URI.create("http://localhost:8080/api/user/"))
+                            .GET()
+                            .build();
 
-            try {
-                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                assertEquals(200, response.statusCode());
-                assertEquals("Hello protected API (user)!", response.body());
-            } catch (Throwable e) {
-                throw new RuntimeException(e);
-            } finally {
-                application.stop();
-            }
-        });
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("Hello protected API (user)!", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
 
         app.handleCompletionHandlerFailure();
     }
 
     @Test
     void testAuthorizedForAdmin() throws Throwable {
-        TestApplicationImpl app = new TestApplicationImpl();
-        app.start(8080, application -> {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
 
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                    .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                    .uri(URI.create("http://localhost:8080/api/admin/"))
-                    .GET()
-                    .build();
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
+                            .uri(URI.create("http://localhost:8080/api/admin/"))
+                            .GET()
+                            .build();
 
-            try {
-                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                assertEquals(200, response.statusCode());
-                assertEquals("Hello protected API (admin)!", response.body());
-            } catch (Throwable e) {
-                throw new RuntimeException(e);
-            } finally {
-                application.stop();
-            }
-        });
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("Hello protected API (admin)!", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                })
+                .start(8080);
 
         app.handleCompletionHandlerFailure();
     }
 
     @Test
     void testUnauthorizedForAdmin() throws Throwable {
-        TestApplicationImpl app = new TestApplicationImpl();
-        app.start(8080, application -> {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
 
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                    .header("Authorization", "Bearer " + JWT_TOKEN_USER)
-                    .uri(URI.create("http://localhost:8080/api/admin/"))
-                    .GET()
-                    .build();
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER)
+                            .uri(URI.create("http://localhost:8080/api/admin/"))
+                            .GET()
+                            .build();
 
-            try {
-                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                assertEquals(403, response.statusCode());
-            } catch (Throwable e) {
-                throw new RuntimeException(e);
-            } finally {
-                application.stop();
-            }
-        });
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(403, response.statusCode());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                })
+                .start(8080);
 
         app.handleCompletionHandlerFailure();
     }
@@ -252,7 +293,7 @@ public class TestApplication {
         }
 
         public static void main(String[] args) {
-            new HelloWorld().start(8080);
+            new HelloWorld().start();
         }
     }
 }

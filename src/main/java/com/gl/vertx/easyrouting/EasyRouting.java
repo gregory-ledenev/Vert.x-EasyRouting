@@ -47,6 +47,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.util.*;
 
+import static com.gl.vertx.easyrouting.HttpMethods.*;
 import static com.gl.vertx.easyrouting.JWTUtil.ROLES;
 
 /**
@@ -75,15 +76,15 @@ public class EasyRouting {
      * @param router the Vert.x Router instance to configure
      * @param target the object containing annotated handler methods
      */
-    public static void setupHandlers(Router router, Object target) {
+    public static void setupController(Router router, Object target) {
         Objects.requireNonNull(router);
         Objects.requireNonNull(target);
 
-        setupHandlers(router, HttpMethods.GET.class, target);
-        setupHandlers(router, HttpMethods.POST.class, target);
-        setupHandlers(router, HttpMethods.DELETE.class, target);
-        setupHandlers(router, HttpMethods.PUT.class, target);
-        setupHandlers(router, HttpMethods.PATCH.class, target);
+        setupController(router, GET.class, target);
+        setupController(router, POST.class, target);
+        setupController(router, DELETE.class, target);
+        setupController(router, PUT.class, target);
+        setupController(router, PATCH.class, target);
 
         setupFailureHandler(router, target);
     }
@@ -130,10 +131,10 @@ public class EasyRouting {
         for (Method method : target.getClass().getDeclaredMethods()) {
             StatusCode statusCodeAnnotation = method.getAnnotation(StatusCode.class);
             if (statusCodeAnnotation != null && statusCodeAnnotation.value() == statusCode) {
-                Annotation methodAnnotation = method.getAnnotation(HttpMethods.GET.class);
+                Annotation methodAnnotation = method.getAnnotation(GET.class);
                 if (methodAnnotation != null) {
                     try {
-                        result = HttpMethods.getPathForAnnotation(methodAnnotation);
+                        result = getPathForAnnotation(methodAnnotation);
                     } catch (Exception e) {
                         LoggerFactory.getLogger(target.getClass()).error("Failed to get redirect path for method: " + methodAnnotation, e);
                         break all;
@@ -160,8 +161,8 @@ public class EasyRouting {
     private static void sortMethods(List<Method> methods, Class<? extends Annotation> annotationClass) {
         methods.sort((m1, m2) -> {
             try {
-                String path1 = HttpMethods.getPathForAnnotation(m1.getAnnotation(annotationClass));
-                String path2 = HttpMethods.getPathForAnnotation(m2.getAnnotation(annotationClass));
+                String path1 = getPathForAnnotation(m1.getAnnotation(annotationClass));
+                String path2 = getPathForAnnotation(m2.getAnnotation(annotationClass));
 
                 // Handle special cases for root paths
                 if (path1.equals("/") && path2.equals("/*")) return -1;
@@ -239,7 +240,7 @@ public class EasyRouting {
      * @param annotationClass the HTTP method annotation class to process
      * @param target          the object containing annotated handler methods
      */
-    private static void setupHandlers(Router router, Class<? extends Annotation> annotationClass, Object target) {
+    private static void setupController(Router router, Class<? extends Annotation> annotationClass, Object target) {
         Set<String> installedHandlers = new HashSet<>();
 
         try {
@@ -247,7 +248,7 @@ public class EasyRouting {
                 Annotation annotation = method.getAnnotation(annotationClass);
                 if (annotation != null) {
                     logger.info("Setting up method for annotation: " + annotation);
-                    String annotationValue = HttpMethods.getPathForAnnotation(annotation);
+                    String annotationValue = getPathForAnnotation(annotation);
                     if (annotationValue != null) {
                         // skip already installed handlers for the same path. the annotation contains both path and method, so it is enough.
                         String installedHandlerKey = annotation.toString();
@@ -255,15 +256,15 @@ public class EasyRouting {
                             continue;
                         installedHandlers.add(installedHandlerKey);
 
-                        if (annotationClass == HttpMethods.GET.class)
+                        if (annotationClass == GET.class)
                             router.get(annotationValue).handler(createHandler(annotation, target));
-                        else if (annotationClass == HttpMethods.POST.class)
+                        else if (annotationClass == POST.class)
                             router.post(annotationValue).handler(createHandler(annotation, target));
-                        else if (annotationClass == HttpMethods.DELETE.class)
+                        else if (annotationClass == DELETE.class)
                             router.delete(annotationValue).handler(createHandler(annotation, target));
-                        else if (annotationClass == HttpMethods.PUT.class)
+                        else if (annotationClass == PUT.class)
                             router.put(annotationValue).handler(createHandler(annotation, target));
-                        else if (annotationClass == HttpMethods.PATCH.class)
+                        else if (annotationClass == PATCH.class)
                             router.patch(annotationValue).handler(createHandler(annotation, target));
                     }
                 }
@@ -277,7 +278,7 @@ public class EasyRouting {
     private static boolean checkRequiredRoles(RoutingContext ctx, Method method) {
         boolean result = true;
 
-        String[] requiredRoles = HttpMethods.requiredRoles(method);
+        String[] requiredRoles = requiredRoles(method);
         if (requiredRoles.length > 0 && ctx.user() != null) {
             JsonArray rolesArray = ctx.user().principal().getJsonArray(ROLES, new JsonArray());
             for (String requiredRole : requiredRoles) {
@@ -343,6 +344,8 @@ public class EasyRouting {
     record MethodResult(Method method, String[] parameterNames, boolean hasBodyParam) {
     }
 
+    private static boolean warnedAboutMissingParameterNames = false;
+
     private static MethodResult getMethod(Annotation annotation,
                                           MultiMap parameters,
                                           MultiMap formAttributes,
@@ -365,18 +368,18 @@ public class EasyRouting {
                 boolean isFormHandler = method.getAnnotation(Form.class) != null;
 
                 Annotation[][] parameterAnnotations = method.getParameterAnnotations();
-                for (Annotation[] annotations : parameterAnnotations) {
-                    if (annotations.length == 0)
-                        continue;
-                    Annotation paramAnnotation = annotations[0];
-                    if (paramAnnotation instanceof Param param) {
+                for (Parameter parameter : method.getParameters()) {
+
+                    if (parameter.getAnnotation(Param.class) != null) {
+                        Param param = parameter.getAnnotation(Param.class);
                         paramNames.add(param.value());
                         String lowerCaseParam = param.value().toLowerCase();
                         if (lowercaseParams.get(lowerCaseParam) != null)
                             matchedParamCount++;
                         else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
                             otherParamCount++;
-                    } else if (paramAnnotation instanceof OptionalParam param) {
+                    } else if (parameter.getAnnotation(OptionalParam.class) != null) {
+                        OptionalParam param = parameter.getAnnotation(OptionalParam.class);
                         paramNames.add(param.value());
                         matchedParamCount++;
                         String lowerCaseParam = param.value().toLowerCase();
@@ -384,17 +387,29 @@ public class EasyRouting {
                             optionalParamCount++;
                         else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
                             otherParamCount++;
-                    } else if (paramAnnotation instanceof BodyParam param) {
+                    } else if (parameter.getAnnotation(BodyParam.class) != null) {
+                        BodyParam param = parameter.getAnnotation(BodyParam.class);
                         otherParamCount++;
                         hasBodyParam = true;
                         paramNames.add(param.value());
-                    } else if (paramAnnotation instanceof PathParam param) {
+                    } if (parameter.getAnnotation(PathParam.class) != null) {
+                        PathParam param = parameter.getAnnotation(PathParam.class);
                         otherParamCount++;
                         paramNames.add(param.value());
-                    }
-                    else if (paramAnnotation instanceof UploadsParam) {
+                    } if (parameter.getAnnotation(UploadsParam.class) != null) {
                         otherParamCount++;
                         paramNames.add("uploads");
+                    } else {
+                        if ("arg0".equals(parameter.getName()) && ! warnedAboutMissingParameterNames) {
+                            warnedAboutMissingParameterNames = true;
+                            logger.warn("Parameter names are missing. Either use @Param annotations or compile project with -parameters option");
+                        }
+                        paramNames.add(parameter.getName());
+                        String lowerCaseParam = parameter.getName().toLowerCase();
+                        if (lowercaseParams.get(lowerCaseParam) != null)
+                            matchedParamCount++;
+                        else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
+                            otherParamCount++;
                     }
                 }
 

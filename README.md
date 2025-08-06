@@ -3,7 +3,7 @@
 EasyRouting is an experimental lightweight annotation-based HTTP routing library
 for Vert.x web applications. It simplifies route configuration by allowing
 developers to define routes using annotations and automatically handles
-parameter binding and response processing. While inspired by SpringBoot's
+parameter binding and response processing. While inspired by JAX-RS and SpringBoot's
 annotation-based routing patterns, it maintains a focused, lightweight
 implementation without attempting to replicate SpringBoot's entire feature set.
 
@@ -95,7 +95,7 @@ public class Application {
         UserController userController = new UserController();
         
         // Setup routes using EasyRouting
-        EasyRouting.setupHandlers(router, userController);
+        EasyRouting.setupController(router, userController);
         
         // Start the server
         vertx.createHttpServer()
@@ -175,6 +175,15 @@ Use `@NotNullResult` annotation to return some response with text and code if th
 
 ### Annotate Method Parameters
 
+EasyRouting automatically tries to bind request parameters, form arguments, and body content to method arguments. It can 
+be done in several ways:
+- direct binding of parameters by their names. To make this work, your project must be compiled with the `-parameters` 
+- option. Otherwise, parameters will have generic names like `arg0`, `arg1`, etc. In that case the warning will be logged.
+- using `@Param` annotation to bind request parameters or form arguments to method arguments
+- using `@OptionalParam` annotation to bind optional request parameters or form arguments to method arguments
+- using `@BodyParam` annotation to bind HTTP body content to a method argument
+- using `@UploadsParam` annotation to bind a list of uploaded files to method arguments
+
 #### @Param
 Use `@Param` annotation to bind request parameters or form arguments to method arguments:
 
@@ -214,8 +223,7 @@ public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @Upl
 
 ## Using EasyRouting Application for Testing and Prototyping
 
-There is a special Application class that allows building minimal applications
-for prototyping and testing purposes
+There is a special Application class that allows building minimal applications for prototyping and testing purposes 
 without having to create a full Vert.x application.
 
 ``` java
@@ -241,17 +249,23 @@ class TestApplication extends Application {
     }
 
     public static void main(String[] args) {
-        TestApplication app = new TestApplication();
-        app.start(8080, app -> {
-            try {
-                // add your testing code here
-            } finally {
-                app.stop();
-            }               
-        });
+        Application app = new TestApplication().
+                onStartCompletion(application -> {
+                // add your teststart code here
+                }).
+                start(8080);
+
         app.handleCompletionHandlerFailure();
     }
 }
+```
+To run an Application with SSL and JWT authentication:
+
+```java
+new UserAdminApplication().
+        jwtAuth(<JWT SECRET>, "/api/*").
+        sslWithJks("keystore", <KEYSTORE PASSWORD>).
+        start(443);
 ```
 
 ## JWT Support
