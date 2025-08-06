@@ -67,6 +67,7 @@ public class Application {
     private Throwable completionHandlerFailure;
     private ApplicationVerticle applicationVerticle;
     private Vertx vertx;
+    private Thread inputThread;
 
     class ApplicationVerticle extends AbstractVerticle {
         @Override
@@ -243,6 +244,11 @@ public class Application {
         synchronized (waitLock) {
             waitLock.notify();
         }
+
+        if (inputThread != null) {
+            inputThread.interrupt();
+            inputThread = null;
+        }
     }
 
     private void startWaiting() {
@@ -261,7 +267,7 @@ public class Application {
      */
     public void waitForInput() {
         readInput = true;
-        Thread inputThread = new Thread(() -> {
+        inputThread = new Thread(() -> {
             Scanner scanner = new Scanner(System.in);
             while (readInput) {
                 String input = scanner.nextLine();
@@ -314,12 +320,14 @@ public class Application {
                             });
                         }
                     } else {
-                        logger.error("Server failed to start on port: " + port + " - " +
-                                result.cause().getMessage());
+                        String error = "Server failed to start on port: " + port + " - " + result.cause().getMessage();
+                        logger.error(error);
                         startPromise.fail(result.cause());
                         if (failureHandler != null) {
                             failureHandler.accept(this, result.cause());
                         }
+                        completionHandlerFailure = new IllegalStateException(error);
+                        vertx.close();
                         stopWaiting();
                     }
                 });

@@ -107,86 +107,110 @@ public class Application {
 
 ## Adding and Configuring Handler Methods
 
-To create handler methods in your controller classes:
+To create handler methods in your controller classes, define usual Java methods that handle requests and produce response 
+and annotate them with one of the HTTP method annotations:
 
-1. **Create a method with an HTTP method annotation** - Use one of the following
-   annotations to define the HTTP method and path:
-    - `@GET(path)` - For HTTP GET requests
-    - `@POST(path)` - For HTTP POST requests
-    - `@PUT(path)` - For HTTP PUT requests
-    - `@DELETE(path)` - For HTTP DELETE requests
-    - `@PATCH(path)` - For HTTP PATCH requests
+- `@GET(path)` - For HTTP GET requests
+- `@POST(path)` - For HTTP POST requests
+- `@PUT(path)` - For HTTP PUT requests
+- `@DELETE(path)` - For HTTP DELETE requests
+- `@PATCH(path)` - For HTTP PATCH requests
 
-2. **Define path parameters** - Use `:paramName` syntax in your path to define
-   path parameters:
-   ```java
-   @HttpMethods.GET("/users/:id")
-   public User getUser(@Param("id") int userId) {
-       // ...
-   }
-   ```
+### Annotate Methods
 
-3. **Bind request parameters** - Use the `@Param` annotation to bind URL/query
-   parameters to method arguments:
-   ```java
+#### @Form
+
+Use `@Form` annotation to handle form data:
+```java
+    @Form
+    @GET("/loginForm")
+    String loginForm(@Param("user") String user, @Param("password") String password) {
+        ...
+}
+```
+
+#### @ContentType
+Use `@ContentType` annotation to set the response content type:
+```java
+    @GET("/text") @ContentType("text/plain")
+    String getText() {
+        return "Hello <b>World!</b>";
+    }
+```
+
+#### @StatusCode
+Use `@StatusCode` annotation to specify that a method  handles specific errors with codes:
+```java
+    @StatusCode(401)
+    @GET("/unauthenticated")
+    Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
+        return new Result<>("You are not unauthenticated to access this: " + redirect, 401);
+    }
+```
+#### @FileFromFolder
+Use `@FileFromFolder` annotation to serve static files from the file system:
+```java
+    @GET("/*") @FileFromFolder("document")
+    String get(@PathParam("path") String path) {
+        return path;
+    }
+```
+
+#### @FileFromResource
+Use `@FileFromResource` annotation to serve static files from the classpath:
+```java
+    @GET("/*") @FileFromResource(UserAdminApplication.class)
+    String get(@PathParam("path") String path) {
+        return path;
+    }
+```
+#### @NotNullResult
+Use `@NotNullResult` annotation to return some response with text and code if the annotated method returns null:
+```java
+    @GET("/api/users/:id") @NotNullResult(value = "No user found", statusCode = 404)
+    User getUser(@Param("id") String id) {
+        return userService.getUser(id);
+    }
+```
+
+### Annotate Method Parameters
+
+#### @Param
+Use `@Param` annotation to bind request parameters or form arguments to method arguments:
+
+```java
    @HttpMethods.GET("/users/search")
-   public List<User> searchUsers(@Param("name") String name, @Param("age") Integer age) {
-       // Access query parameters like /users/search?name=John&age=30
-   }
-   ```
-4. **Bind optional request parameters** - Use the `@OptionalParam` annotation to
-   bind optional URL/query parameters to method arguments:
-   ```java
+    public List<User> searchUsers(@Param("name") String name, @Param("age") Integer age) {
+        // Access query parameters like /users/search?name=John&age=30
+    }
+```
+
+#### @OptionalParam
+Use the `@OptionalParam` annotation to bind optional request parameters or form arguments to method arguments:
+```java
    @HttpMethods.GET("/users/search")
    public List<User> searchUsers(@Param("name") String name, @OptionalParam("age") Integer age) {
        // Access query parameters like /users/search?name=John&age=30
    }
-   ```
+```
 
-5. **Access request body** - Use the `@BodyParam` annotation to bind JSON body
-   content to method arguments:
-   ```java
+#### @BodyParam
+Use the `@BodyParam` annotation to bind HTTP body content to a method argument:
+```java
    @HttpMethods.POST("/users")
    public User createUser(@BodyParam("user") User user) {
        // Automatically converts JSON to User object
    }
-   ```
+```
 
-6. **Handle file uploads** - Use the `@UploadsParam` annotation to bind a list
-   of uploaded files to method arguments:
-
+#### @UploadsParam
+Use the `@UploadsParam` annotation to bind a list of uploaded files to method arguments:
 ```java
-
 @POST("/files/uploadFile")
 public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @UploadsParam List<FileUpload> fileUploads) {
-    return HandlerResult.saveFiles("files", fileUploads, "redirect:/");
+    return Result.saveFiles("files", fileUploads, "redirect:/");
 }
 ```
-
-7. **Handle form submissions** - Use the `@Form` annotation to bind form
-   fields to method arguments:
-
-```java
-
-@Form
-@GET("/loginForm")
-String loginForm(@Param("user") String user, @Param("password") String password) {
-    ...
-}
-```
-
-8. **Return values** - Handler methods can return various types which are
-   automatically processed:
-    - Java objects (automatically converted to JSON)
-    - Lists/arrays (automatically converted to JSON arrays)
-    - Primitives or Strings (sent as response)
-    - `void` (for operations without explicit returns)
-
-9. **Register your controllers** - After defining your handler methods, register
-   the controller instance with EasyRouting:
-   ```java
-   EasyRouting.setupHandlers(router, controllerInstance);
-   ```
 
 ## Using EasyRouting Application for Testing and Prototyping
 

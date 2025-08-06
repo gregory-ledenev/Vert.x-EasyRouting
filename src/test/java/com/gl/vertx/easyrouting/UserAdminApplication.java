@@ -36,25 +36,39 @@ public class UserAdminApplication extends Application {
     }
 
     UserAdminApplication(LoginService loginService, UserService userService) {
-        super(JWT_SECRET, "/api/*"); // init JWT authentication
+//        super(JWT_SECRET, "/api/*"); // init JWT authentication
         this.userService = userService;
         this.loginService = loginService;
     }
 
-    @POST("/login")
-    HandlerResult<String> login(@BodyParam("path") LoginData loginData) {
-        String token = loginService.login(loginData.username(), loginData.password());
-        return token != null ? new HandlerResult<>(token) : HandlerResult.invalidLogin();
+    @POST("/login") @Login
+    String login(@BodyParam("path") LoginData loginData) {
+        return loginService.login(loginData.username(), loginData.password());
     }
 
-    @GET("/*")
-    HandlerResult<String> get(@PathParam("path") String path) {
-        return HandlerResult.fileFromResource(this.getClass(), path);
+    @GET("/*") @FileFromResource(UserAdminApplication.class)
+    String get(@PathParam("path") String path) {
+        return path;
+    }
+
+    @GET("/text") @ContentType("text/plain")
+    String getText() {
+        return "Hello <b>World!</b>";
+    }
+
+    @GET("/html")
+    String getHtml() {
+        return "Hello <b>World!</b>";
     }
 
     @GET("/api/users")
     List<User> getUsers() {
         return userService.getUsers();
+    }
+
+    @GET("/api/users/:id") @NotNullResult(value = "No user found", statusCode = 404)
+    User getUser(@Param("id") String id) {
+        return userService.getUser(id);
     }
 
     @POST(value = "/api/users", requiredRoles = {"admin"})
@@ -74,8 +88,8 @@ public class UserAdminApplication extends Application {
 
     @StatusCode(401)
     @GET("/unauthenticated")
-    HandlerResult<?> unauthenticated(@OptionalParam("redirect") String redirect) {
-        return new HandlerResult<>("You are not unauthenticated to access this: " + redirect, 401);
+    Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
+        return new Result<>("You are not unauthenticated to access this: " + redirect, 401);
     }
 
     private final LoginService loginService;
@@ -126,6 +140,10 @@ class UserService {
     public boolean deleteUser(String id) {
         users.remove(id);
         return true;
+    }
+
+    public User getUser(String id) {
+        return users.get(id);
     }
 }
 

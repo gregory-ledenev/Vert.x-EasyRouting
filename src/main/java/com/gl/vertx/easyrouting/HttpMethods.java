@@ -116,6 +116,38 @@ public class HttpMethods {
     }
 
     /**
+     * Retrieves the roles required to access a specific endpoint based on its annotation.
+     * Supported annotations include HTTP methods such as GET, POST, PUT, DELETE, and PATCH.
+     *
+     * @param annotation the annotation representing the HTTP method
+     * @return an array of roles required for the endpoint, or null if the annotation is not supported
+     */
+    public static String[] getRolesForAnnotation(Annotation annotation) {
+        if (annotation instanceof HttpMethods.GET get) return get.requiredRoles();
+        if (annotation instanceof HttpMethods.POST post) return post.requiredRoles();
+        if (annotation instanceof HttpMethods.PUT put) return put.requiredRoles();
+        if (annotation instanceof HttpMethods.DELETE delete) return delete.requiredRoles();
+        if (annotation instanceof HttpMethods.PATCH patch) return patch.requiredRoles();
+        return null;
+    }
+
+    /**
+     * Retrieves the path associated with a specific HTTP method annotation.
+     * Supported annotations include GET, POST, PUT, DELETE, and PATCH.
+     *
+     * @param annotation the annotation representing the HTTP method
+     * @return the path associated with the provided annotation, or null if the annotation is not supported
+     */
+    public static String getPathForAnnotation(Annotation annotation) {
+        if (annotation instanceof HttpMethods.GET get) return get.value();
+        if (annotation instanceof HttpMethods.POST post) return post.value();
+        if (annotation instanceof HttpMethods.PUT put) return put.value();
+        if (annotation instanceof HttpMethods.DELETE delete) return delete.value();
+        if (annotation instanceof HttpMethods.PATCH patch) return patch.value();
+        return null;
+    }
+
+    /**
      * Gets the required roles for a method.
      * @param method the method to get roles for
      * @return the required roles for the method
@@ -123,16 +155,12 @@ public class HttpMethods {
     public static String[] requiredRoles(Method method) {
         try {
             for (Annotation annotation : method.getAnnotations()) {
-                if (annotation instanceof HttpMethods.GET get) return get.requiredRoles();
-                if (annotation instanceof HttpMethods.POST post) return post.requiredRoles();
-                if (annotation instanceof HttpMethods.PUT put) return put.requiredRoles();
-                if (annotation instanceof HttpMethods.DELETE delete) return delete.requiredRoles();
-                if (annotation instanceof HttpMethods.PATCH patch) return patch.requiredRoles();
+                String[] roles = getRolesForAnnotation(annotation);
+                if (roles != null) return roles;
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to get required roles", e);
         }
         return new String[0];
     }
-
 }

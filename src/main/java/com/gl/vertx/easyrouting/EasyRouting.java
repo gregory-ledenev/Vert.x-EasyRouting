@@ -133,7 +133,7 @@ public class EasyRouting {
                 Annotation methodAnnotation = method.getAnnotation(HttpMethods.GET.class);
                 if (methodAnnotation != null) {
                     try {
-                        result = (String) methodAnnotation.annotationType().getMethod("value").invoke(methodAnnotation);
+                        result = HttpMethods.getPathForAnnotation(methodAnnotation);
                     } catch (Exception e) {
                         LoggerFactory.getLogger(target.getClass()).error("Failed to get redirect path for method: " + methodAnnotation, e);
                         break all;
@@ -160,8 +160,8 @@ public class EasyRouting {
     private static void sortMethods(List<Method> methods, Class<? extends Annotation> annotationClass) {
         methods.sort((m1, m2) -> {
             try {
-                String path1 = m1.getAnnotation(annotationClass).annotationType().getMethod("value").invoke(m1.getAnnotation(annotationClass)).toString();
-                String path2 = m2.getAnnotation(annotationClass).annotationType().getMethod("value").invoke(m2.getAnnotation(annotationClass)).toString();
+                String path1 = HttpMethods.getPathForAnnotation(m1.getAnnotation(annotationClass));
+                String path2 = HttpMethods.getPathForAnnotation(m2.getAnnotation(annotationClass));
 
                 // Handle special cases for root paths
                 if (path1.equals("/") && path2.equals("/*")) return -1;
@@ -247,7 +247,7 @@ public class EasyRouting {
                 Annotation annotation = method.getAnnotation(annotationClass);
                 if (annotation != null) {
                     logger.info("Setting up method for annotation: " + annotation);
-                    String annotationValue = annotation.getClass().getMethod("value").invoke(annotation).toString();
+                    String annotationValue = HttpMethods.getPathForAnnotation(annotation);
                     if (annotationValue != null) {
                         // skip already installed handlers for the same path. the annotation contains both path and method, so it is enough.
                         String installedHandlerKey = annotation.toString();
@@ -430,7 +430,7 @@ public class EasyRouting {
                 if (optionalParam != null) {
                     result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters, optionalParam.defaultValue()));
                 } else {
-                    result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters, optionalParam.defaultValue()));
+                    result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters, null));
                 }
             }
         }
@@ -495,23 +495,18 @@ public class EasyRouting {
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static void processHandlerResult(Method method, RoutingContext ctx, Object result) {
         if (method.getReturnType() == void.class) {
-            handleVoidResult(ctx);
-        } else if (result == null) {
-            handleNullResult(ctx);
+            ctx.end();
         } else {
-            if (result instanceof HandlerResult<?> handlerResult) {
+            if (result instanceof Result<?> handlerResult) {
+                handlerResult.setResultClass(method.getReturnType());
+                handlerResult.setAnnotations(method.getAnnotations());
                 handlerResult.handle(ctx);
             } else {
-                new HandlerResult(result).handle(ctx);
+                Result handlerResult = new Result(result);
+                handlerResult.setResultClass(method.getReturnType());
+                handlerResult.setAnnotations(method.getAnnotations());
+                handlerResult.handle(ctx);
             }
         }
-    }
-
-    private static void handleVoidResult(RoutingContext ctx) {
-        ctx.end();
-    }
-
-    private static void handleNullResult(RoutingContext ctx) {
-        ctx.response().setStatusCode(204).end();
     }
 }

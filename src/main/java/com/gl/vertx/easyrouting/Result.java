@@ -37,6 +37,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 
 import java.io.InputStream;
+import java.lang.annotation.Annotation;
 import java.net.FileNameMap;
 import java.net.URLConnection;
 import java.nio.file.Files;
@@ -53,8 +54,8 @@ import static com.gl.vertx.easyrouting.EasyRouting.REDIRECT;
  *
  * @param <T> The type of the result value
  */
-public class HandlerResult<T> {
-    private static final Logger logger = LoggerFactory.getLogger(HandlerResult.class);
+public class Result<T> {
+    private static final Logger logger = LoggerFactory.getLogger(Result.class);
 
     public static final String CONTENT_TYPE = "content-type";
     public static final String CONTENT_DISPOSITION = "content-disposition";
@@ -70,6 +71,8 @@ public class HandlerResult<T> {
     private final T result;
     private Map<String, String> headers = new HashMap<>();
     private int statusCode;
+    private Annotation[] annotations;
+    private Class<?> resultClass;
 
     /**
      * Creates a HandlerResult for sending plain text content.
@@ -77,10 +80,10 @@ public class HandlerResult<T> {
      * @param text The plain text content to send
      * @return HandlerResult configured for response
      */
-    public static HandlerResult<String> plainText(String text) {
+    public static Result<String> plainText(String text) {
         Objects.requireNonNull(text);
 
-        return new HandlerResult<>(text,
+        return new Result<>(text,
                 Map.of(CONTENT_TYPE, CT_TEXT_PLAIN));
     }
 
@@ -90,16 +93,16 @@ public class HandlerResult<T> {
      * @param path path to an HTML file to send
      * @return HandlerResult configured for HTML response
      */
-    public static HandlerResult<String> html(Path path) {
+    public static Result<String> html(Path path) {
         Objects.requireNonNull(path);
 
         try {
             String html = Files.readString(path);
-            return new HandlerResult<>(html,
+            return new Result<>(html,
                     Map.of(CONTENT_TYPE, CT_TEXT_HTML));
         } catch (IOException e) {
             logger.error("Failed to read HTML file: " + path, e);
-            return new HandlerResult<>("Failed to read HTML file: " + path.getFileName().toString(), 500);
+            return new Result<>("Failed to read HTML file: " + path.getFileName().toString(), 500);
         }
     }
 
@@ -111,11 +114,11 @@ public class HandlerResult<T> {
      * @param redirect    The URL to redirect to after saving files
      * @return HandlerResult configured for file saving and redirect
      */
-    public static HandlerResult<String> saveFiles(String folder, List<FileUpload> fileUploads, String redirect) {
+    public static Result<String> saveFiles(String folder, List<FileUpload> fileUploads, String redirect) {
         Objects.requireNonNull(folder);
         Objects.requireNonNull(fileUploads);
 
-        return new HandlerResult<>(redirect) {
+        return new Result<>(redirect) {
 
             @Override
             public void handle(RoutingContext ctx) {
@@ -149,11 +152,11 @@ public class HandlerResult<T> {
      * @param fileName The name of the file to be sent
      * @return HandlerResult configured for file download
      */
-    public static HandlerResult<Buffer> file(Buffer buffer, String fileName) {
+    public static Result<Buffer> file(Buffer buffer, String fileName) {
         Objects.requireNonNull(buffer);
         Objects.requireNonNull(fileName);
 
-        return new HandlerResult<>(buffer, Map.of(
+        return new Result<>(buffer, Map.of(
                 CONTENT_TYPE, getMimeType(fileName),
                 CONTENT_DISPOSITION, MessageFormat.format("attachment; filename=\"{0}\"", fileName)
         ));
@@ -166,11 +169,11 @@ public class HandlerResult<T> {
      * @param fileName The name of the file to be sent
      * @return HandlerResult configured for file download
      */
-    public static HandlerResult<String> file(String content, String fileName) {
+    public static Result<String> file(String content, String fileName) {
         Objects.requireNonNull(content);
         Objects.requireNonNull(fileName);
 
-        return new HandlerResult<>(content, Map.of(
+        return new Result<>(content, Map.of(
                 CONTENT_TYPE, getMimeType(fileName))
         );
     }
@@ -185,12 +188,12 @@ public class HandlerResult<T> {
      * @return HandlerResult configured for file response. Returns 403 status if path contains "..",
      * 404 status if file not found, or file content if successful
      */
-    public static HandlerResult<String> fileFromResource(Class<?> clazz, String name) {
+    public static Result<String> fileFromResource(Class<?> clazz, String name) {
         Objects.requireNonNull(clazz);
         Objects.requireNonNull(name);
 
         if (name.contains(PARENT_PATH))
-            return new HandlerResult<>("Forbidden", 403);
+            return new Result<>("Forbidden", 403);
 
         String file;
         if (name.equals(ROOT_PATH))
@@ -200,7 +203,7 @@ public class HandlerResult<T> {
 
         try (InputStream in = clazz.getResourceAsStream(file)) {
             if (in != null)
-                return HandlerResult.file(new String(in.readAllBytes()), file);
+                return Result.file(new String(in.readAllBytes()), file);
             else
                 return fileNotFound(file);
         } catch (IOException e) {
@@ -217,12 +220,12 @@ public class HandlerResult<T> {
      * @return HandlerResult configured for file response. Returns 403 status if path contains "..",
      * 404 status if file not found, or file content if successful
      */
-    public static HandlerResult<String> fileFromFolder(Path folder, String name) {
+    public static Result<String> fileFromFolder(Path folder, String name) {
         Objects.requireNonNull(folder);
         Objects.requireNonNull(name);
 
         if (name.contains(PARENT_PATH))
-            return new HandlerResult<>("Forbidden", 403);
+            return new Result<>("Forbidden", 403);
 
         String file;
         if (name.equals(ROOT_PATH))
@@ -233,7 +236,7 @@ public class HandlerResult<T> {
         Path filePath = folder.resolve(file);
         try {
             if (Files.exists(filePath))
-                return HandlerResult.file(Files.readString(filePath), file);
+                return Result.file(Files.readString(filePath), file);
             else
                 return fileNotFound(file);
         } catch (IOException e) {
@@ -248,8 +251,8 @@ public class HandlerResult<T> {
      * @param location The URL or path to redirect to
      * @return HandlerResult configured for redirect response
      */
-    public static HandlerResult<String> redirect(String location) {
-        return new HandlerResult<>(REDIRECT + location);
+    public static Result<String> redirect(String location) {
+        return new Result<>(REDIRECT + location);
     }
 
     /**
@@ -258,8 +261,8 @@ public class HandlerResult<T> {
      * @param file The name of the file that failed to be read
      * @return HandlerResult with error message and 500 status code
      */
-    public static HandlerResult<String> failedToReadFile(String file) {
-        return new HandlerResult<>("Failed to read file: " + file, 500);
+    public static Result<String> failedToReadFile(String file) {
+        return new Result<>("Failed to read file: " + file, 500);
     }
 
     /**
@@ -269,8 +272,8 @@ public class HandlerResult<T> {
      *
      * @return HandlerResult configured with error message and 401 status code
      */
-    public static HandlerResult<String> invalidLogin() {
-        return new HandlerResult<>("Invalid login or password", 401);
+    public static Result<String> invalidLogin() {
+        return new Result<>("Invalid login or password", 401);
     }
 
     /**
@@ -279,8 +282,8 @@ public class HandlerResult<T> {
      * @param file The name of the file that was not found
      * @return HandlerResult with error message and 404 status code
      */
-    public static HandlerResult<String> fileNotFound(String file) {
-        return new HandlerResult<>("File not found: " + file, 404);
+    public static Result<String> fileNotFound(String file) {
+        return new Result<>("File not found: " + file, 404);
     }
     /**
      * Creates a HandlerResult for sending a file from a Path.
@@ -288,8 +291,8 @@ public class HandlerResult<T> {
      * @param filePath The path to the file to be sent
      * @return HandlerResult configured for file download
      */
-    public static HandlerResult<Path> file(Path filePath) {
-        return new HandlerResult<>(filePath);
+    public static Result<Path> file(Path filePath) {
+        return new Result<>(filePath);
     }
 
 
@@ -314,7 +317,7 @@ public class HandlerResult<T> {
      *
      * @param result The result value
      */
-    public HandlerResult(T result) {
+    public Result(T result) {
         this.result = result;
         this.statusCode = 200;
     }
@@ -326,7 +329,7 @@ public class HandlerResult<T> {
      * @param headers    The HTTP headers to include in the response
      * @param statusCode The HTTP status code
      */
-    public HandlerResult(T result, Map<String, String> headers, int statusCode) {
+    public Result(T result, Map<String, String> headers, int statusCode) {
         this.result = result;
         if (headers != null)
             this.headers = headers;
@@ -339,7 +342,7 @@ public class HandlerResult<T> {
      * @param result  The result value
      * @param headers The HTTP headers to include in the response
      */
-    public HandlerResult(T result, Map<String, String> headers) {
+    public Result(T result, Map<String, String> headers) {
         this(result, headers, 200);
     }
 
@@ -349,7 +352,7 @@ public class HandlerResult<T> {
      * @param result     The result value
      * @param statusCode The HTTP status code
      */
-    public HandlerResult(T result, int statusCode) {
+    public Result(T result, int statusCode) {
         this.result = result;
         this.statusCode = statusCode;
     }
@@ -402,6 +405,8 @@ public class HandlerResult<T> {
 
     public void handle(RoutingContext ctx) {
         try {
+            addAnnotatedHeaders();
+
             headers.forEach(ctx.response()::putHeader);
 
             ctx.response().setStatusCode(statusCode);
@@ -428,6 +433,8 @@ public class HandlerResult<T> {
                 sendPlainTextResponse(ctx, result.toString());
             } else if (result instanceof String string) {
                 handleStringResult(ctx, string);
+            } else if (result == null) {
+                handleNullResult(ctx);
             } else {
                 handleOtherResult(ctx, result);
             }
@@ -438,6 +445,33 @@ public class HandlerResult<T> {
             logger.error("Error handling result: ", e);
             ctx.response().setStatusCode(500).end();
         }
+    }
+
+    private void addAnnotatedHeaders() {
+        if (annotations != null) {
+            for (Annotation annotation : annotations) {
+                if (annotation instanceof ContentType contentType) {
+                    if (! headers.containsKey(CONTENT_TYPE))
+                        headers.put(CONTENT_TYPE, contentType.value());
+                }
+            }
+        }
+    }
+
+    private void handleNullResult(RoutingContext ctx) {
+        if (annotations != null) {
+            for (Annotation annotation : annotations) {
+                if (annotation instanceof Login) {
+                    invalidLogin().handle(ctx);
+                    return;
+                } else if (annotation instanceof NotNullResult notNullResult) {
+                    ctx.response().setStatusCode(notNullResult.statusCode()).end(notNullResult.value());
+                    return;
+                }
+            }
+        }
+
+        ctx.response().end();
     }
 
     private void sendJsonResponse(RoutingContext ctx, String json) {
@@ -478,6 +512,24 @@ public class HandlerResult<T> {
             String redirectPath = string.substring(REDIRECT.length());
             ctx.redirect(redirectPath);
         } else {
+            if (annotations != null) {
+                for (Annotation annotation : annotations) {
+                    if (annotation instanceof FileFromResource fileFromResource) {
+                        Result.fileFromResource(fileFromResource.value(), string).handle(ctx);
+                        return;
+                    } else if (annotation instanceof FileFromFolder fileFromFolder) {
+                        Result.fileFromFolder(Path.of(fileFromFolder.value()), string).handle(ctx);
+                        return;
+                    } else if (annotation instanceof Login) {
+                        if (string.isEmpty()) {
+                            invalidLogin().handle(ctx);
+                            return;
+                        }
+                    }
+
+                }
+            }
+
             if (! ctx.response().headers().contains(CONTENT_TYPE))
                 ctx.response()
                         .putHeader(CONTENT_TYPE, CT_TEXT_HTML)
@@ -495,5 +547,21 @@ public class HandlerResult<T> {
             logger.error("Failed to convert result to JSON: " + result, e);
             sendPlainTextResponse(ctx, result.toString());
         }
+    }
+
+    public Annotation[] getAnnotations() {
+        return annotations;
+    }
+
+    void setAnnotations(Annotation[] annotations) {
+        this.annotations = annotations;
+    }
+
+    public Class<?> getResultClass() {
+        return resultClass;
+    }
+
+    void setResultClass(Class<?> resultClass) {
+        this.resultClass = resultClass;
     }
 }

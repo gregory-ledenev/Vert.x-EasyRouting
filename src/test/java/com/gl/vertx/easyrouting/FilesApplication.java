@@ -15,7 +15,7 @@ public class FilesApplication extends Application {
         app.start();
     }
 
-    @HttpMethods.GET("/")
+    @HttpMethods.GET(value = "/")
     public String get() {
         File folder = new File("files");
         StringBuilder fileList = new StringBuilder();
@@ -32,14 +32,14 @@ public class FilesApplication extends Application {
         return MessageFormat.format(HTML, fileList.toString());
     }
 
-    @HttpMethods.GET("/files/serveFile")
+    @HttpMethods.GET(value = "/files/serveFile")
     public Path serveFile(@Param("fileName") String fileName) {
         return Path.of("files", fileName);
     }
 
-    @HttpMethods.POST("/files/uploadFile")
-    public HandlerResult<String> handleUploads(@Param("fileCount") int fileCount, @UploadsParam List<FileUpload> fileUploads) {
-        return HandlerResult.saveFiles("files", fileUploads, "redirect:/");
+    @HttpMethods.POST(value = "/files/uploadFile")
+    public Result<String> handleUploads(@Param("fileCount") int fileCount, @UploadsParam List<FileUpload> fileUploads) {
+        return Result.saveFiles("files", fileUploads, "redirect:/");
     }
 
     public static final String HTML = """

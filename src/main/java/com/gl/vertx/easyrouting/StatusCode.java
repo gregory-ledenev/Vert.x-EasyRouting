@@ -30,7 +30,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Annotation to specify that a method can handle certain HTTP status codes.
+ * Annotation to specify that a method can handle certain HTTP errors with status codes.
  * This can be used to define which methods can handle certain errors.
  */
 @Retention(RetentionPolicy.RUNTIME)

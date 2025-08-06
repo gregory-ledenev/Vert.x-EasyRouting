@@ -6,9 +6,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 import static com.gl.vertx.easyrouting.HttpMethods.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -22,24 +20,24 @@ public class TestApplication {
         void doNothing() {
         }
 
-        @GET("/*")
+        @GET(value = "/*")
         String hello() {
             return "Hello from TestApplication!";
         }
 
         @Form
-        @POST("/login")
+        @POST(value = "/login")
         String login(@Param("user") String user, @Param("password") String password, @OptionalParam(value = "role") String role) {
             return JWTUtil.generateToken(getVertx(), user, Arrays.asList(role.split(",")), JWT_PASSWORD);
         }
 
         @StatusCode(401)
-        @GET("/loginForm")
+        @GET(value = "/loginForm")
         String loginForm(@OptionalParam("redirect") String redirect) {
             return "Login Form - redirect back to: " + redirect;
         }
 
-        @GET("/api/*")
+        @GET(value = "/api/*")
         String api() {
             return "Hello protected API!";
         }
@@ -248,7 +246,7 @@ public class TestApplication {
     }
 
     static class HelloWorld extends Application {
-        @GET("/*")
+        @GET(value = "/*")
         String hello() {
             return "Hello World!";
         }
