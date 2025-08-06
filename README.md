@@ -44,31 +44,31 @@ simplifies the development process while still providing powerful features.
 ``` java
 public class UserController {
     
-    @HttpMethods.GET("/users")
+    @GET("/users")
     public List<User> getAllUsers() {
         // Return all users
         return userService.findAll();
     }
     
-    @HttpMethods.GET("/users/:id")
+    @GET("/users/:id")
     public User getUser(@Param("id") int userId) {
         // Return user by ID
         return userService.findById(userId);
     }
     
-    @HttpMethods.POST("/users")
+    @POST("/users")
     public User createUser(@BodyParam("user") User user) {
         // Create a new user
         return userService.create(user);
     }
     
-    @HttpMethods.PUT("/users/:id")
+    @PUT("/users/:id")
     public User updateUser(@Param("id") int userId, @BodyParam("user") User user) {
         // Update existing user
         return userService.update(userId, user);
     }
     
-    @HttpMethods.DELETE("/users/:id")
+    @DELETE("/users/:id")
     public void deleteUser(@Param("id") int userId) {
         // Delete user
         userService.delete(userId);
@@ -177,8 +177,7 @@ Use `@NotNullResult` annotation to return some response with text and code if th
 
 EasyRouting automatically tries to bind request parameters, form arguments, and body content to method arguments. It can 
 be done in several ways:
-- direct binding of parameters by their names. To make this work, your project must be compiled with the `-parameters` 
-- option. Otherwise, parameters will have generic names like `arg0`, `arg1`, etc. In that case the warning will be logged.
+- direct binding of parameters by their names. To make this work, your project must be compiled with the `-parameters` option. Otherwise, parameters will have generic names like `arg0`, `arg1`, etc. In that case the warning will be logged.
 - using `@Param` annotation to bind request parameters or form arguments to method arguments
 - using `@OptionalParam` annotation to bind optional request parameters or form arguments to method arguments
 - using `@BodyParam` annotation to bind HTTP body content to a method argument
