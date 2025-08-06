@@ -292,8 +292,10 @@ public String loginForm(@OptionalParam("redirect") String redirect) {
 
 ## Adding to Your Build
 
-To add to your build: copy `com.gl.vertx.easyrouting` classes to your Vert.x
-project.
+To add to your build either:
+- copy `com.gl.vertx.easyrouting` sources to your project 
+- build the project and add the corresponding jar's from the _target_ folder to 
+your class path or to your build tool dependencies.
 
 ## License
 
