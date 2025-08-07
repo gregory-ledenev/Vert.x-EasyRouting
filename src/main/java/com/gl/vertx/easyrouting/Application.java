@@ -299,6 +299,9 @@ public class Application {
      *                   or its cause in case of AssertionError
      */
     public void handleCompletionHandlerFailure() throws Throwable {
+        // required to let the completion handler store completionHandlerFailure if any
+        Thread.sleep(100);
+
         if (getCompletionHandlerFailure() != null) {
             if (getCompletionHandlerFailure().getCause() instanceof AssertionError)
                 throw getCompletionHandlerFailure().getCause();
@@ -394,8 +397,6 @@ public class Application {
                                 } catch (Throwable e) {
                                     completionHandlerFailure = e;
                                 }
-                                if (completionHandlerFailure != null)
-                                    throw new RuntimeException(completionHandlerFailure);
                                 return null;
                             });
                         }

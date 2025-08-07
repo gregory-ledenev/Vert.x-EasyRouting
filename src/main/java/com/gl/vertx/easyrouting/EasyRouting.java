@@ -392,11 +392,11 @@ public class EasyRouting {
                         otherParamCount++;
                         hasBodyParam = true;
                         paramNames.add(param.value());
-                    } if (parameter.getAnnotation(PathParam.class) != null) {
+                    } else if (parameter.getAnnotation(PathParam.class) != null) {
                         PathParam param = parameter.getAnnotation(PathParam.class);
                         otherParamCount++;
                         paramNames.add(param.value());
-                    } if (parameter.getAnnotation(UploadsParam.class) != null) {
+                    } else if (parameter.getAnnotation(UploadsParam.class) != null) {
                         otherParamCount++;
                         paramNames.add("uploads");
                     } else {

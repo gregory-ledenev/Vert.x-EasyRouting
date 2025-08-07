@@ -58,6 +58,11 @@ public class TestApplication {
             return "Hello protected API (admin)!";
         }
 
+        @GET(value = "/concatenate")
+        String concatenate(@Param("str1") String str1, @Param("str2") String str2, @OptionalParam("str3") String str3) {
+            return str1 + str2 + (str3 != null && str3.isEmpty() ? "" : str3);
+        }
+
         public TestApplicationImpl() {
             jwtAuth(JWT_PASSWORD, "/api/*");
         }
@@ -85,6 +90,43 @@ public class TestApplication {
                         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                         assertEquals(200, response.statusCode());
                         assertEquals("Hello from TestApplication!", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testOptionalParam() throws Throwable {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+
+
+                    try {
+                        HttpRequest request = HttpRequest.newBuilder()
+                                .uri(URI.create("http://localhost:8080/concatenate?str1=Hello%20&str2=World&str3=!"))
+                                .GET()
+                                .build();
+
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("Hello World!", response.body());
+
+                        request = HttpRequest.newBuilder()
+                                .uri(URI.create("http://localhost:8080/concatenate?str1=Hello%20&str2=World"))
+                                .GET()
+                                .build();
+
+                        response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("Hello World", response.body());
                     } catch (Throwable e) {
                         throw new RuntimeException(e);
                     } finally {
