@@ -3,7 +3,8 @@
 EasyRouting is an experimental lightweight annotation-based HTTP routing library
 for Vert.x web applications. It simplifies route configuration by allowing
 developers to define routes using annotations and automatically handles
-parameter binding and response processing. While inspired by JAX-RS and SpringBoot's
+parameter binding and response processing. While inspired by JAX-RS and
+SpringBoot's
 annotation-based routing patterns, it maintains a focused, lightweight
 implementation without attempting to replicate SpringBoot's entire feature set.
 
@@ -11,11 +12,35 @@ EasyRouting enables you to build web applications effortlessly, even without
 prior knowledge of Vert.x. To get started, you only need a basic understanding
 of HTTP and general knowledge of Java.
 
-With just a single page of code, EasyRouting serves web pages and APIs,
-automatically converts incoming and outgoing data, handles errors, supports JWT
-authentication, and enforces role-based access control.
+You need to know a bit about HTTP and some basic Java. Although EasyRouting runs
+on Vert.x, you truly don’t have to care
+about the internals like request objects or response things. What do you
+actually do?
 
-This library is ideal for rapidly prototyping, testing, or learning the basics
+- Make your class extend Application
+- Write regular methods for your app’s logic, add simple annotations for HTTP
+  verbs and paths
+- Use Java objects for parameters and return values — no dealing with JSON
+- Optionally, mark method parameters to bind query/form stuff if you want
+- Add a main method that creates your applications and calls `start()`
+
+Here’s literally all it takes:
+
+```java
+static class HelloWorld extends Application {
+    @GET("/*")
+    String hello() {
+        return "Hello World!";
+    }
+
+    public static void main(String[] args) {
+        new HelloWorld().start();
+    }
+}
+
+```
+
+This library is ideal for rapid prototyping, testing, or learning the basics
 of web application development. It offers a minimal, annotation-driven API that
 simplifies the development process while still providing powerful features.
 
@@ -32,46 +57,88 @@ simplifies the development process while still providing powerful features.
 - JSON objects conversion
 - Automatic incoming and outgoing data conversion
 - Automatic response processing
+- Automatic handling of blocking operations
 - Redirect handling
 - Builtin JWT authentication and role-based authorization
 - Binding methods to HTTP error codes
 - Ready-to use application class for prototyping and testing
 
-## Basic Usage
+## Using EasyRouting Application
+
+There is a special Application class that allows building minimal applications
+for prototyping and testing purposes without learning how to create a full
+Vert.x application.
+
+``` java
+class TestApplication extends Application {
+    @GET("/*")
+    String hello() {
+        return "Hello from TestApplication!";
+    }
+
+    public static void main(String[] args) {
+        TestApplication app = new TestApplication().start(8080);
+    }
+}
+```
+
+You may use that application to simplify making your tests:
+
+- add your test code to `onStartCompletion` handler
+- call `handleCompletionHandlerFailure()` to propagate collected failures, like
+  assertion errors, and to make your tests functional
+
+``` java
+class TestApplication extends Application {
+    @GET("/*")
+    String hello() {
+        return "Hello from TestApplication!";
+    }
+
+    public static void main(String[] args) {
+        Application app = new TestApplication().
+                onStartCompletion(application -> {
+                // add your teststart code here
+                }).
+                start();
+
+        app.handleCompletionHandlerFailure();
+    }
+}
+```
+
+To run an Application with JWT authentication and SSL:
+
+- use `jwtAuth(jwtSecret, paths)` method to enable JWT authentication with a
+  secret key and path's to protected resources
+- use `sslWithJks(jksKeyStorePath, jksKeyStorePassword)` or
+  `sslWithPem(keyPath, certPath)` method to enable SSL
+- call `start(port)` method with an SSL port number (`443` by default for
+  production or `8443` for development)
+
+```java
+new UserAdminApplication().
+
+jwtAuth(<JWT SECRET>, "/api/*").
+
+sslWithJks("keystore",<KEYSTORE PASSWORD>).
+
+start(443);
+```
+
+## Using With Vert.x Router
+
+If `Application` is too simple for your needs, or if you want to use and mix
+EasyRouting with your exiting Vert.x code — you can use EasyRouting with Vert.x
+Router.
 
 ### 1. Create a Controller Class
 
 ``` java
-public class UserController {
-    
-    @GET("/users")
-    public List<User> getAllUsers() {
-        // Return all users
-        return userService.findAll();
-    }
-    
-    @GET("/users/:id")
-    public User getUser(@Param("id") int userId) {
-        // Return user by ID
-        return userService.findById(userId);
-    }
-    
-    @POST("/users")
-    public User createUser(@BodyParam("user") User user) {
-        // Create a new user
-        return userService.create(user);
-    }
-    
-    @PUT("/users/:id")
-    public User updateUser(@Param("id") int userId, @BodyParam("user") User user) {
-        // Update existing user
-        return userService.update(userId, user);
-    }
-    
-    @DELETE("/users/:id")
-    public void deleteUser(@Param("id") int userId) {
-        // Delete user
-        userService.delete(userId);
+public class Controller {
+    @GET("/*")
+    String hello() {
+        return "Hello from TestApplication!";
     }
 }
 ```
@@ -79,10 +146,6 @@ public class UserController {
 ### 2. Register the Controller with Vert.x Router
 
 ``` java
-import io.vertx.core.Vertx;
-import io.vertx.ext.web.Router;
-import com.gl.vertx.easyrouting.EasyRouting;
-
 public class Application {
     public static void main(String[] args) {
         Vertx vertx = Vertx.vertx();
@@ -94,7 +157,7 @@ public class Application {
         // Create controller instance
         UserController userController = new UserController();
         
-        // Setup routes using EasyRouting
+        // Setup controller using EasyRouting
         EasyRouting.setupController(router, userController);
         
         // Start the server
@@ -107,7 +170,8 @@ public class Application {
 
 ## Adding and Configuring Handler Methods
 
-To create handler methods in your controller classes, define usual Java methods that handle requests and produce
+To create handler methods in your controller classes, define usual Java methods
+that handle requests and produce
 response
 and annotate them with one of the HTTP method annotations:
 
@@ -121,30 +185,35 @@ and annotate them with one of the HTTP method annotations:
 
 #### @Blocking
 
-Use `@Blocking` annotation to mark methods that should be executed as blocking operations. When applied to a method, it
-indicates that the method's execution will be automatically processed on a worker thread rather than the event loop,
-preventing the event loop from being blocked. Use this annotation to mark operations that may take a long time and
+Use `@Blocking` annotation to mark methods that should be executed as blocking
+operations. When applied to a method, it
+indicates that the method's execution will be automatically processed on a
+worker thread rather than the event loop,
+preventing the event loop from being blocked. Use this annotation to mark
+operations that may take a long time and
 to safely add any blocking code to such methods.
 
 ```java
+
 @Blocking
 @GET(value = "/blockingHello")
 String blockingHello() {
     try {
         Thread.sleep(5000); // simulate blocking operation
-    } catch (InterruptedException e) {}
-    
+    } catch (InterruptedException e) {
+    }
     return "Blocking hello from TestApplication!";
 }
 ```
 
-#### @Form 
+#### @Form
 
 Use `@Form` annotation to mark methods that should handle form data:
+
 ```java
+
 @Form
 @GET("/loginForm")
-
 String loginForm(@Param("user") String user, @Param("password") String password) {
         ...
 }
@@ -165,7 +234,8 @@ String getText() {
 
 #### @StatusCode
 
-Use `@StatusCode` annotation to specify that a method handles specific errors with codes:
+Use `@StatusCode` annotation to specify that a method handles specific errors
+with codes:
 
 ```java
 
@@ -204,7 +274,8 @@ String get(@PathParam("path") String path) {
 
 #### @NotNullResult
 
-Use `@NotNullResult` annotation to return some response with text and code if the annotated method returns null:
+Use `@NotNullResult` annotation to return some response with text and code if
+the annotated method returns null:
 
 ```java
 
@@ -217,20 +288,27 @@ User getUser(@Param("id") String id) {
 
 ### Annotate Method Parameters
 
-EasyRouting automatically tries to bind request parameters, form arguments, and body content to method arguments. It can
+EasyRouting automatically tries to bind request parameters, form arguments, and
+body content to method arguments. It can
 be done in several ways:
 
-- direct binding of parameters by their names. To make this work, your project must be compiled with the `-parameters`
-  option. Otherwise, parameters will have generic names like `arg0`, `arg1`, etc. In that case the warning will be
+- direct binding of parameters by their names. To make this work, your project
+  must be compiled with the `-parameters`
+  option. Otherwise, parameters will have generic names like `arg0`, `arg1`,
+  etc. In that case the warning will be
   logged.
-- using `@Param` annotation to bind request parameters or form arguments to method arguments
-- using `@OptionalParam` annotation to bind optional request parameters or form arguments to method arguments
+- using `@Param` annotation to bind request parameters or form arguments to
+  method arguments
+- using `@OptionalParam` annotation to bind optional request parameters or form
+  arguments to method arguments
 - using `@BodyParam` annotation to bind HTTP body content to a method argument
-- using `@UploadsParam` annotation to bind a list of uploaded files to method arguments
+- using `@UploadsParam` annotation to bind a list of uploaded files to method
+  arguments
 
 #### @Param
 
-Use `@Param` annotation to bind request parameters or form arguments to method arguments:
+Use `@Param` annotation to bind request parameters or form arguments to method
+arguments:
 
 ```java
 
@@ -242,7 +320,8 @@ public List<User> searchUsers(@Param("name") String name, @Param("age") Integer 
 
 #### @OptionalParam
 
-Use the `@OptionalParam` annotation to bind optional request parameters or form arguments to method arguments:
+Use the `@OptionalParam` annotation to bind optional request parameters or form
+arguments to method arguments:
 
 ```java
 
@@ -266,7 +345,8 @@ public User createUser(@BodyParam("user") User user) {
 
 #### @UploadsParam
 
-Use the `@UploadsParam` annotation to bind a list of uploaded files to method arguments:
+Use the `@UploadsParam` annotation to bind a list of uploaded files to method
+arguments:
 
 ```java
 
@@ -274,57 +354,6 @@ Use the `@UploadsParam` annotation to bind a list of uploaded files to method ar
 public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @UploadsParam List<FileUpload> fileUploads) {
     return Result.saveFiles("files", fileUploads, "redirect:/");
 }
-```
-
-## Using EasyRouting Application for Testing and Prototyping
-
-There is a special Application class that allows building minimal applications for prototyping and testing purposes
-without having to create a full Vert.x application.
-
-``` java
-class TestApplication extends Application {
-    @GET("/*")
-    String hello() {
-        return "Hello from TestApplication!";
-    }
-
-    public static void main(String[] args) {
-        TestApplication app = new TestApplication().start(8080);
-    }
-}
-```
-
-You may use that application to simplify making your tests:
-
-``` java
-class TestApplication extends Application {
-    @GET("/*")
-    String hello() {
-        return "Hello from TestApplication!";
-    }
-
-    public static void main(String[] args) {
-        Application app = new TestApplication().
-                onStartCompletion(application -> {
-                // add your teststart code here
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-}
-```
-
-To run an Application with SSL and JWT authentication:
-
-```java
-new UserAdminApplication().
-
-jwtAuth(<JWT SECRET>, "/api/*").
-
-sslWithJks("keystore",<KEYSTORE PASSWORD>).
-
-start(443);
 ```
 
 ## JWT Support
@@ -362,6 +391,19 @@ public String loginForm(@OptionalParam("redirect") String redirect) {
     ...
 }
 ```
+
+## Sample Test Applications
+
+There are several sample applications in the
+_src/test/java/com/gl/vertx/easyrouting_
+folder that demonstrate various features of the EasyRouting library:
+
+- **FilesApplication**: demonstrates file upload and download handling
+- **UserAdminApplication**: demonstrates sample user management application with
+  handling static pages, implementing API, JWT authentication and role-based 
+  authorization, and SSL support
+- **TestApplication**: demonstrates using EasyRouting Application class for
+  prototyping and testing
 
 ## Adding to Your Build
 

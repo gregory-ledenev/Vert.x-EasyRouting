@@ -114,6 +114,15 @@ public class Application {
         return self();
     }
 
+    /**
+     * Configures the application to use JKS (Java KeyStore) for SSL/TLS encryption.
+     * Sets the path to the JKS key store and the password for accessing it.
+     * If PEM key and certificate options are already set, they will be cleared and ignored.
+     *
+     * @param jksKeyStorePath     the path to the JKS key store file
+     * @param jksKeyStorePassword the password for the JKS key store
+     * @return the current {@code Application} instance, allowing for method chaining
+     */
     public <T extends Application> T sslWithJks(String jksKeyStorePath, String jksKeyStorePassword) {
         Objects.requireNonNull(jksKeyStorePath);
         Objects.requireNonNull(jksKeyStorePassword);
@@ -130,6 +139,15 @@ public class Application {
         return self();
     }
 
+    /**
+     * Configures the application to use PEM (Privacy Enhanced Mail) key and certificate for SSL/TLS encryption.
+     * Sets the paths to the PEM key and certificate files.
+     * If JKS options are already set, they will be cleared and ignored.
+     *
+     * @param keyPath  the path to the PEM key file
+     * @param certPath the path to the PEM certificate file
+     * @return the current {@code Application} instance, allowing for method chaining
+     */
     public <T extends Application> T sslWithPem(String keyPath, String certPath) {
         Objects.requireNonNull(keyPath);
         Objects.requireNonNull(certPath);
@@ -159,7 +177,7 @@ public class Application {
     }
 
     /**
-     * Registers a failure handler that is executed when an application startup failure occurs.
+     * Registers a failure handler executed when an application startup failure occurs.
      * The failure handler receives the current application instance and the related {@code Throwable}.
      *
      * @param failureHandler a {@code BiConsumer} accepting the application instance and the exception
@@ -172,10 +190,10 @@ public class Application {
     }
 
     /**
-     * Starts the application on the 8080.
+     * Starts the application on a default port: 8080 or 8443 for SSL/TLS.
      */
     public <T extends Application> T start() {
-        start(8080);
+        start(0);
 
         return self();
     }
@@ -211,6 +229,22 @@ public class Application {
         }
 
         return self();
+    }
+
+    /**
+     * Registers a shutdown hook that ensures the application is properly stopped when the JVM shuts down.
+     * If the application is running when the shutdown hook is triggered, it will initiate a graceful
+     * shutdown of the application by calling the stop() method.
+     */
+    public Application handleShutdown() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (isRunning()) {
+                System.out.println("Shutting down...");
+                stop();
+            }
+        }));
+
+        return this;
     }
 
     /**
@@ -310,7 +344,6 @@ public class Application {
         }
     }
 
-
     private final Object waitLock = new Object();
 
     private void stopWaiting() {
@@ -357,22 +390,6 @@ public class Application {
 
     private static final Object shutdownLock= new Object();
 
-    /**
-     * Registers a shutdown hook that ensures the application is properly stopped when the JVM shuts down.
-     * If the application is running when the shutdown hook is triggered, it will initiate a graceful
-     * shutdown of the application by calling the stop() method.
-     */
-    public Application handleShutdown() {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            if (isRunning()) {
-                System.out.println("Shutting down...");
-                stop();
-            }
-        }));
-
-        return this;
-    }
-
     private void createHttpServer(Promise<Void> startPromise, Router router, int port) {
         HttpServerOptions options = new HttpServerOptions();
 
@@ -382,12 +399,14 @@ public class Application {
             options.setSsl(true).setKeyCertOptions(pemKeyCertOptions);
         }
 
+        final int portToUse = port == 0 ? (options.isSsl() ? 8443 : 8080) : port;
+
         vertx.createHttpServer(options)
                 .requestHandler(router)
-                .listen(port, host)
+                .listen(portToUse, host)
                 .onComplete(result -> {
                     if (result.succeeded()) {
-                        logger.info("Server started on port: " + port);
+                        logger.info("Server started on port: " + portToUse);
                         startPromise.complete();
                         logger.info("Application started");
                         if (completionHandler != null) {
@@ -401,7 +420,7 @@ public class Application {
                             });
                         }
                     } else {
-                        String error = "Server failed to start on port: " + port + " - " + result.cause().getMessage();
+                        String error = "Server failed to start on port: " + portToUse + " - " + result.cause().getMessage();
                         logger.error(error);
                         startPromise.fail(result.cause());
                         if (failureHandler != null) {
