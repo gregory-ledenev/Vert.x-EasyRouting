@@ -171,9 +171,8 @@ public class Application {
 ## Adding and Configuring Handler Methods
 
 To create handler methods in your controller classes, define usual Java methods
-that handle requests and produce
-response
-and annotate them with one of the HTTP method annotations:
+that handle requests and produce response and annotate them with one of the HTTP 
+method annotations:
 
 - `@GET(path)` - For HTTP GET requests
 - `@POST(path)` - For HTTP POST requests
@@ -183,18 +182,31 @@ and annotate them with one of the HTTP method annotations:
 
 ### Annotate Methods
 
+#### @GET, @POST, @PUT, @DELETE, @PATCH
+
+Use `@GET`, `@POST`, `@PUT`, `@DELETE`, or `@PATCH` annotations to define
+handler methods for specific HTTP methods. The `value` parameter specifies the
+URL path for the handler. You may use the the optional `requiredRoles` parameter 
+to specify required roles for the method, which will be checked during JWT 
+authentication. If nor roles are specified, the method will be accessible to all 
+authenticated users.
+```java
+@DELETE(value = "/api/users/:id", requiredRoles = {"admin"})
+boolean deleteUser(@Param("id") String id) {
+    return userService.deleteUser(id);
+}
+```
+
 #### @Blocking
 
 Use `@Blocking` annotation to mark methods that should be executed as blocking
-operations. When applied to a method, it
-indicates that the method's execution will be automatically processed on a
-worker thread rather than the event loop,
+operations. When applied to a method, it indicates that the method's execution 
+will be automatically processed on a worker thread rather than the event loop,
 preventing the event loop from being blocked. Use this annotation to mark
-operations that may take a long time and
-to safely add any blocking code to such methods.
+operations that may take a long time and to safely add any blocking code to 
+such methods.
 
 ```java
-
 @Blocking
 @GET(value = "/blockingHello")
 String blockingHello() {
@@ -211,9 +223,8 @@ String blockingHello() {
 Use `@Form` annotation to mark methods that should handle form data:
 
 ```java
-
 @Form
-@GET("/loginForm")
+@POST("/loginForm")
 String loginForm(@Param("user") String user, @Param("password") String password) {
         ...
 }
@@ -224,7 +235,6 @@ String loginForm(@Param("user") String user, @Param("password") String password)
 Use `@ContentType` annotation to set the response content type:
 
 ```java
-
 @GET("/text")
 @ContentType("text/plain")
 String getText() {
@@ -238,7 +248,6 @@ Use `@StatusCode` annotation to specify that a method handles specific errors
 with codes:
 
 ```java
-
 @StatusCode(401)
 @GET("/unauthenticated")
 Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
@@ -251,7 +260,6 @@ Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
 Use `@FileFromFolder` annotation to serve static files from the file system:
 
 ```java
-
 @GET("/*")
 @FileFromFolder("document")
 String get(@PathParam("path") String path) {
@@ -264,7 +272,6 @@ String get(@PathParam("path") String path) {
 Use `@FileFromResource` annotation to serve static files from the classpath:
 
 ```java
-
 @GET("/*")
 @FileFromResource(UserAdminApplication.class)
 String get(@PathParam("path") String path) {
@@ -278,7 +285,6 @@ Use `@NotNullResult` annotation to return some response with text and code if
 the annotated method returns null:
 
 ```java
-
 @GET("/api/users/:id")
 @NotNullResult(value = "No user found", statusCode = 404)
 User getUser(@Param("id") String id) {
@@ -293,10 +299,8 @@ body content to method arguments. It can
 be done in several ways:
 
 - direct binding of parameters by their names. To make this work, your project
-  must be compiled with the `-parameters`
-  option. Otherwise, parameters will have generic names like `arg0`, `arg1`,
-  etc. In that case the warning will be
-  logged.
+  must be compiled with the `-parameters` option. Otherwise, parameters will have generic names like `arg0`, `arg1`,
+  etc. In that case the warning will be logged.
 - using `@Param` annotation to bind request parameters or form arguments to
   method arguments
 - using `@OptionalParam` annotation to bind optional request parameters or form
@@ -311,7 +315,6 @@ Use `@Param` annotation to bind request parameters or form arguments to method
 arguments:
 
 ```java
-
 @HttpMethods.GET("/users/search")
 public List<User> searchUsers(@Param("name") String name, @Param("age") Integer age) {
     // Access query parameters like /users/search?name=John&age=30
@@ -324,7 +327,6 @@ Use the `@OptionalParam` annotation to bind optional request parameters or form
 arguments to method arguments:
 
 ```java
-
 @HttpMethods.GET("/users/search")
 public List<User> searchUsers(@Param("name") String name, @OptionalParam("age") Integer age) {
     // Access query parameters like /users/search?name=John&age=30
@@ -336,7 +338,6 @@ public List<User> searchUsers(@Param("name") String name, @OptionalParam("age") 
 Use the `@BodyParam` annotation to bind HTTP body content to a method argument:
 
 ```java
-
 @HttpMethods.POST("/users")
 public User createUser(@BodyParam("user") User user) {
     // Automatically converts JSON to User object
@@ -349,7 +350,6 @@ Use the `@UploadsParam` annotation to bind a list of uploaded files to method
 arguments:
 
 ```java
-
 @POST("/files/uploadFile")
 public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @UploadsParam List<FileUpload> fileUploads) {
     return Result.saveFiles("files", fileUploads, "redirect:/");
@@ -371,7 +371,6 @@ specifying them as `requiredRoles` in the
 `@GET`, `@POST` etc. annotations:
 
 ```java
-
 @HttpMethods.GET("/users/:id", requiredRoles = {"admin"})
 public User getUser(@Param("id") int userId) {
     // ...
@@ -384,7 +383,6 @@ EasyRouting supports error handling by binding HTTP error codes to handler
 methods using `@StatusCode` annotations:
 
 ```java
-
 @StatusCode(401)
 @GET("/loginForm")
 public String loginForm(@OptionalParam("redirect") String redirect) {
@@ -409,7 +407,7 @@ folder that demonstrate various features of the EasyRouting library:
 
 To add to your build either:
 
-- copy `com.gl.vertx.easyrouting` sources to your project
+- copy `com.gl.vertx.easyrouting` sources to your project and compile them.
 - build the project and add the corresponding jar's from the _target_ folder to
   your class path or to your build tool dependencies.
 

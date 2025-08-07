@@ -426,7 +426,7 @@ public class EasyRouting {
                         otherParamCount++;
                         paramNames.add("uploads");
                     } else {
-                        if ("arg0".equals(parameter.getName()) && ! warnedAboutMissingParameterNames) {
+                        if (parameter.getName().matches("arg\\d+") && ! warnedAboutMissingParameterNames) {
                             warnedAboutMissingParameterNames = true;
                             logger.warn("Parameter names are missing. Either use @Param annotations or compile project with -parameters option");
                         }
