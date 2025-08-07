@@ -35,7 +35,7 @@ import java.lang.annotation.Target;
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
-public @interface StatusCode {
+public @interface HandleStatusCode {
     /**
      * The HTTP status code that this method can handle.
      * @return the HTTP status code

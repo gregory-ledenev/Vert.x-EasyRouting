@@ -126,19 +126,14 @@ public class Result<T> {
                 for (FileUpload fileUpload : files) {
                     String uploadedFileName = fileUpload.uploadedFileName();
                     String fileName = fileUpload.fileName();
-                    if (! fileName.isEmpty()) {
-                        try {
-                            Files.copy(Path.of(uploadedFileName), Path.of(toFolder, fileName), StandardCopyOption.REPLACE_EXISTING);
-                        } catch (Exception e) {
-                            logger.error("Failed to save uploaded file: " + fileName, e);
-                            ctx.response().setStatusCode(400).end("Failed to save uploaded file: " + fileName);
-                            return;
-                        }
-                        fileUpload.delete();
-                    } else {
-                        logger.warn("Uploaded file is missing");
-                        ctx.response().setStatusCode(400).end("Uploaded file is missing");
+                    try {
+                        Files.copy(Path.of(uploadedFileName), Path.of(toFolder, fileName), StandardCopyOption.REPLACE_EXISTING);
+                    } catch (Exception e) {
+                        logger.error("Failed to save uploaded file: " + fileName, e);
+                        ctx.response().setStatusCode(400).end("Failed to save uploaded file: " + fileName);
                         return;
+                    } finally {
+                        fileUpload.delete(); // delete a temp file disregarding any errors to avoid leakage
                     }
                 }
 

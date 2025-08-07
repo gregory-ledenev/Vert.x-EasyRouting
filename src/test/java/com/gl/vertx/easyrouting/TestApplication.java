@@ -48,7 +48,7 @@ public class TestApplication {
             return JWTUtil.generateToken(getVertx(), user, Arrays.asList(role.split(",")), JWT_PASSWORD);
         }
 
-        @StatusCode(401)
+        @HandleStatusCode(401)
         @GET(value = "/loginForm")
         String loginForm(@OptionalParam("redirect") String redirect) {
             return "Login Form - redirect back to: " + redirect;

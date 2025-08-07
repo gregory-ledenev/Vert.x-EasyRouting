@@ -32,7 +32,7 @@ import static com.gl.vertx.easyrouting.HttpMethods.*;
 public class UserAdminApplication extends Application {
 
     public static void main(String[] args) {
-        new UserAdminApplication(new LoginService(),  new UserService()).
+        new UserAdminApplication(new LoginService(), new UserService()).
                 jwtAuth(JWT_SECRET, "/api/*").
                 sslWithJks("keystore", "1234567890").
                 start();
@@ -88,7 +88,7 @@ public class UserAdminApplication extends Application {
         return userService.deleteUser(id);
     }
 
-    @StatusCode(401)
+    @HandleStatusCode(401)
     @GET("/unauthenticated")
     Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
         return new Result<>("You are not unauthenticated to access this: " + redirect, 401);

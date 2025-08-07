@@ -180,7 +180,7 @@ method annotations:
 - `@DELETE(path)` - For HTTP DELETE requests
 - `@PATCH(path)` - For HTTP PATCH requests
 
-### Annotate Methods
+### Annotating Methods
 
 #### @GET, @POST, @PUT, @DELETE, @PATCH
 
@@ -242,13 +242,13 @@ String getText() {
 }
 ```
 
-#### @StatusCode
+#### @HandleStatusCode
 
-Use `@StatusCode` annotation to specify that a method handles specific errors
+Use `@HandleStatusCode` annotation to specify that a method handles specific errors
 with codes:
 
 ```java
-@StatusCode(401)
+@HandleStatusCode(401)
 @GET("/unauthenticated")
 Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
     return new Result<>("You are not unauthenticated to access this: " + redirect, 401);
@@ -292,7 +292,7 @@ User getUser(@Param("id") String id) {
 }
 ```
 
-### Annotate Method Parameters
+### Annotating Method Parameters
 
 EasyRouting automatically tries to bind request parameters, form arguments, and
 body content to method arguments. It can
@@ -312,7 +312,7 @@ be done in several ways:
 #### @Param
 
 Use `@Param` annotation to bind request parameters or form arguments to method
-arguments:
+parameters:
 
 ```java
 @HttpMethods.GET("/users/search")
@@ -324,7 +324,7 @@ public List<User> searchUsers(@Param("name") String name, @Param("age") Integer 
 #### @OptionalParam
 
 Use the `@OptionalParam` annotation to bind optional request parameters or form
-arguments to method arguments:
+arguments to method parameters:
 
 ```java
 @HttpMethods.GET("/users/search")
@@ -335,7 +335,7 @@ public List<User> searchUsers(@Param("name") String name, @OptionalParam("age") 
 
 #### @BodyParam
 
-Use the `@BodyParam` annotation to bind HTTP body content to a method argument:
+Use the `@BodyParam` annotation to bind HTTP body content to a method parameter:
 
 ```java
 @HttpMethods.POST("/users")
@@ -346,8 +346,8 @@ public User createUser(@BodyParam("user") User user) {
 
 #### @UploadsParam
 
-Use the `@UploadsParam` annotation to bind a list of uploaded files to method
-arguments:
+Use the `@UploadsParam` annotation to bind a list of uploaded files to a method
+parameter. Note: the method parameter must be a `List<FileUpload>`.
 
 ```java
 @POST("/files/uploadFile")
@@ -355,6 +355,16 @@ public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @Upl
     return Result.saveFiles("files", fileUploads, "redirect:/");
 }
 ```
+### Returning Results
+
+EasyRouting simplifies handling method results by:
+- Automatically converting Java objects to JSON when needed.
+- Determining and setting the appropriate content type for the response.
+
+If you need more control and want to return a custom response, you can return an instance of the Result class. This 
+class lets you specify custom headers, status codes, and more. It also provides convenient factory methods for common 
+scenarios. For example, to save uploaded files to the file system and then return a redirect response, your upload 
+handling method can return: `Result.saveFiles("files", fileUploads, "redirect:/")`.
 
 ## JWT Support
 
@@ -380,10 +390,10 @@ public User getUser(@Param("id") int userId) {
 ## Error Handling
 
 EasyRouting supports error handling by binding HTTP error codes to handler
-methods using `@StatusCode` annotations:
+methods using `@HandleStatusCode` annotations:
 
 ```java
-@StatusCode(401)
+@HandleStatusCode(401)
 @GET("/loginForm")
 public String loginForm(@OptionalParam("redirect") String redirect) {
     ...

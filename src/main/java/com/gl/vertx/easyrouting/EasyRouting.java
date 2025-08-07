@@ -130,7 +130,7 @@ public class EasyRouting {
 
         all:
         for (Method method : target.getClass().getDeclaredMethods()) {
-            StatusCode statusCodeAnnotation = method.getAnnotation(StatusCode.class);
+            HandleStatusCode statusCodeAnnotation = method.getAnnotation(HandleStatusCode.class);
             if (statusCodeAnnotation != null && statusCodeAnnotation.value() == statusCode) {
                 Annotation methodAnnotation = method.getAnnotation(GET.class);
                 if (methodAnnotation != null) {
