@@ -25,6 +25,17 @@ public class TestApplication {
             return "Hello from TestApplication!";
         }
 
+        @Blocking
+        @GET(value = "/blockingHello")
+        String blockingHello() {
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                // do nothing
+            }
+            return "Blocking hello from TestApplication!";
+        }
+
         @Form
         @POST(value = "/login")
         String login(@Param("user") String user, @Param("password") String password, @OptionalParam(value = "role") String role) {
@@ -90,6 +101,32 @@ public class TestApplication {
                         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                         assertEquals(200, response.statusCode());
                         assertEquals("Hello from TestApplication!", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testBlocking() throws Throwable {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/blockingHello"))
+                            .GET()
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("Blocking hello from TestApplication!", response.body());
                     } catch (Throwable e) {
                         throw new RuntimeException(e);
                     } finally {

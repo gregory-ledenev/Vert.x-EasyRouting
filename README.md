@@ -107,7 +107,8 @@ public class Application {
 
 ## Adding and Configuring Handler Methods
 
-To create handler methods in your controller classes, define usual Java methods that handle requests and produce response 
+To create handler methods in your controller classes, define usual Java methods that handle requests and produce
+response
 and annotate them with one of the HTTP method annotations:
 
 - `@GET(path)` - For HTTP GET requests
@@ -118,102 +119,157 @@ and annotate them with one of the HTTP method annotations:
 
 ### Annotate Methods
 
-#### @Form
+#### @Blocking
 
-Use `@Form` annotation to handle form data:
+Use `@Blocking` annotation to mark methods that should be executed as blocking operations. When applied to a method, it
+indicates that the method's execution will be automatically processed on a worker thread rather than the event loop,
+preventing the event loop from being blocked. Use this annotation to mark operations that may take a long time and
+to safely add any blocking code to such methods.
+
 ```java
-    @Form
-    @GET("/loginForm")
-    String loginForm(@Param("user") String user, @Param("password") String password) {
+@Blocking
+@GET(value = "/blockingHello")
+String blockingHello() {
+    try {
+        Thread.sleep(5000); // simulate blocking operation
+    } catch (InterruptedException e) {}
+    
+    return "Blocking hello from TestApplication!";
+}
+```
+
+#### @Form 
+
+Use `@Form` annotation to mark methods that should handle form data:
+```java
+@Form
+@GET("/loginForm")
+
+String loginForm(@Param("user") String user, @Param("password") String password) {
         ...
 }
 ```
 
 #### @ContentType
+
 Use `@ContentType` annotation to set the response content type:
+
 ```java
-    @GET("/text") @ContentType("text/plain")
-    String getText() {
-        return "Hello <b>World!</b>";
-    }
+
+@GET("/text")
+@ContentType("text/plain")
+String getText() {
+    return "Hello <b>World!</b>";
+}
 ```
 
 #### @StatusCode
-Use `@StatusCode` annotation to specify that a method  handles specific errors with codes:
+
+Use `@StatusCode` annotation to specify that a method handles specific errors with codes:
+
 ```java
-    @StatusCode(401)
-    @GET("/unauthenticated")
-    Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
-        return new Result<>("You are not unauthenticated to access this: " + redirect, 401);
-    }
+
+@StatusCode(401)
+@GET("/unauthenticated")
+Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
+    return new Result<>("You are not unauthenticated to access this: " + redirect, 401);
+}
 ```
+
 #### @FileFromFolder
+
 Use `@FileFromFolder` annotation to serve static files from the file system:
+
 ```java
-    @GET("/*") @FileFromFolder("document")
-    String get(@PathParam("path") String path) {
-        return path;
-    }
+
+@GET("/*")
+@FileFromFolder("document")
+String get(@PathParam("path") String path) {
+    return path;
+}
 ```
 
 #### @FileFromResource
+
 Use `@FileFromResource` annotation to serve static files from the classpath:
+
 ```java
-    @GET("/*") @FileFromResource(UserAdminApplication.class)
-    String get(@PathParam("path") String path) {
-        return path;
-    }
+
+@GET("/*")
+@FileFromResource(UserAdminApplication.class)
+String get(@PathParam("path") String path) {
+    return path;
+}
 ```
+
 #### @NotNullResult
+
 Use `@NotNullResult` annotation to return some response with text and code if the annotated method returns null:
+
 ```java
-    @GET("/api/users/:id") @NotNullResult(value = "No user found", statusCode = 404)
-    User getUser(@Param("id") String id) {
-        return userService.getUser(id);
-    }
+
+@GET("/api/users/:id")
+@NotNullResult(value = "No user found", statusCode = 404)
+User getUser(@Param("id") String id) {
+    return userService.getUser(id);
+}
 ```
 
 ### Annotate Method Parameters
 
-EasyRouting automatically tries to bind request parameters, form arguments, and body content to method arguments. It can 
+EasyRouting automatically tries to bind request parameters, form arguments, and body content to method arguments. It can
 be done in several ways:
-- direct binding of parameters by their names. To make this work, your project must be compiled with the `-parameters` option. Otherwise, parameters will have generic names like `arg0`, `arg1`, etc. In that case the warning will be logged.
+
+- direct binding of parameters by their names. To make this work, your project must be compiled with the `-parameters`
+  option. Otherwise, parameters will have generic names like `arg0`, `arg1`, etc. In that case the warning will be
+  logged.
 - using `@Param` annotation to bind request parameters or form arguments to method arguments
 - using `@OptionalParam` annotation to bind optional request parameters or form arguments to method arguments
 - using `@BodyParam` annotation to bind HTTP body content to a method argument
 - using `@UploadsParam` annotation to bind a list of uploaded files to method arguments
 
 #### @Param
+
 Use `@Param` annotation to bind request parameters or form arguments to method arguments:
 
 ```java
-   @HttpMethods.GET("/users/search")
-    public List<User> searchUsers(@Param("name") String name, @Param("age") Integer age) {
-        // Access query parameters like /users/search?name=John&age=30
-    }
+
+@HttpMethods.GET("/users/search")
+public List<User> searchUsers(@Param("name") String name, @Param("age") Integer age) {
+    // Access query parameters like /users/search?name=John&age=30
+}
 ```
 
 #### @OptionalParam
+
 Use the `@OptionalParam` annotation to bind optional request parameters or form arguments to method arguments:
+
 ```java
-   @HttpMethods.GET("/users/search")
-   public List<User> searchUsers(@Param("name") String name, @OptionalParam("age") Integer age) {
-       // Access query parameters like /users/search?name=John&age=30
-   }
+
+@HttpMethods.GET("/users/search")
+public List<User> searchUsers(@Param("name") String name, @OptionalParam("age") Integer age) {
+    // Access query parameters like /users/search?name=John&age=30
+}
 ```
 
 #### @BodyParam
+
 Use the `@BodyParam` annotation to bind HTTP body content to a method argument:
+
 ```java
-   @HttpMethods.POST("/users")
-   public User createUser(@BodyParam("user") User user) {
-       // Automatically converts JSON to User object
-   }
+
+@HttpMethods.POST("/users")
+public User createUser(@BodyParam("user") User user) {
+    // Automatically converts JSON to User object
+}
 ```
 
 #### @UploadsParam
+
 Use the `@UploadsParam` annotation to bind a list of uploaded files to method arguments:
+
 ```java
+
 @POST("/files/uploadFile")
 public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @UploadsParam List<FileUpload> fileUploads) {
     return Result.saveFiles("files", fileUploads, "redirect:/");
@@ -222,7 +278,7 @@ public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @Upl
 
 ## Using EasyRouting Application for Testing and Prototyping
 
-There is a special Application class that allows building minimal applications for prototyping and testing purposes 
+There is a special Application class that allows building minimal applications for prototyping and testing purposes
 without having to create a full Vert.x application.
 
 ``` java
@@ -258,13 +314,17 @@ class TestApplication extends Application {
     }
 }
 ```
+
 To run an Application with SSL and JWT authentication:
 
 ```java
 new UserAdminApplication().
-        jwtAuth(<JWT SECRET>, "/api/*").
-        sslWithJks("keystore", <KEYSTORE PASSWORD>).
-        start(443);
+
+jwtAuth(<JWT SECRET>, "/api/*").
+
+sslWithJks("keystore",<KEYSTORE PASSWORD>).
+
+start(443);
 ```
 
 ## JWT Support
@@ -306,9 +366,10 @@ public String loginForm(@OptionalParam("redirect") String redirect) {
 ## Adding to Your Build
 
 To add to your build either:
-- copy `com.gl.vertx.easyrouting` sources to your project 
-- build the project and add the corresponding jar's from the _target_ folder to 
-your class path or to your build tool dependencies.
+
+- copy `com.gl.vertx.easyrouting` sources to your project
+- build the project and add the corresponding jar's from the _target_ folder to
+  your class path or to your build tool dependencies.
 
 ## License
 

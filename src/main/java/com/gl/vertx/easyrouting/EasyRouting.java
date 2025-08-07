@@ -40,6 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.net.URLEncoder;
@@ -299,7 +300,7 @@ public class EasyRouting {
                         ctx.request().method() == HttpMethod.POST ? ctx.request().formAttributes() : null,
                         target);
                 if (handlerMethod == null) {
-                    logger.error("No handler method for: \"" + annotation + "\" and parameters: " + ctx.request().params());
+                    logger.error("No handler method for: \"" + annotation + "\" and parameters: " + ctx.request().params().names());
                     ctx.response().setStatusCode(404).end();
                 } else if (checkRequiredRoles(ctx, handlerMethod.method)) {
                     if (handlerMethod.hasBodyParam) {
@@ -307,8 +308,7 @@ public class EasyRouting {
                         Buffer bodyBuffer = ctx.getBody();
                         try {
                             Object[] args = methodParameterValues(ctx, handlerMethod.method(), handlerMethod.parameterNames, handlerMethod.method().getParameterTypes(), ctx.request().params(), bodyBuffer);
-                            Object result = handlerMethod.method().invoke(target, args);
-                            processHandlerResult(handlerMethod.method(), ctx, result);
+                            invokeHandlerMethod(target, ctx, handlerMethod, args);
                         } catch (Exception e) {
                             ctx.response()
                                     .setStatusCode(500)
@@ -318,8 +318,7 @@ public class EasyRouting {
                         }
                     } else {
                         Object[] args = methodParameterValues(ctx, handlerMethod.method(), handlerMethod.parameterNames, handlerMethod.method().getParameterTypes(), ctx.request().params(), null);
-                        Object result = handlerMethod.method().invoke(target, args);
-                        processHandlerResult(handlerMethod.method(), ctx, result);
+                        invokeHandlerMethod(target, ctx, handlerMethod, args);
                     }
                 } else {
                     throw new HttpException(403, "Access denied"); // exception to let failure handler handle it
@@ -332,6 +331,33 @@ public class EasyRouting {
                 throw new HttpException(500, e);
             }
         };
+    }
+
+    private static void invokeHandlerMethod(Object target, RoutingContext ctx, MethodResult handlerMethod, Object[] args) throws IllegalAccessException, InvocationTargetException {
+        if (handlerMethod.method().isAnnotationPresent(Blocking.class)) {
+            ctx.vertx().executeBlocking(promise -> {
+                // Blocking operation
+                Object result = null;
+                try {
+                    result = handlerMethod.method().invoke(target, args);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+                promise.complete(result);
+            }, res -> {
+                if (res.succeeded()) {
+                    processHandlerResult(handlerMethod.method(), ctx, res.result());
+                } else {
+                    if (res.cause() instanceof RuntimeException)
+                        throw (RuntimeException) res.cause();
+                    else
+                        throw new RuntimeException(res.cause());
+                }
+            });
+        } else {
+            Object result = handlerMethod.method().invoke(target, args);
+            processHandlerResult(handlerMethod.method(), ctx, result);
+        }
     }
 
     private static void errorHandlerInvocation(Annotation annotation, Set<String> parameterNames, Exception exception) {
