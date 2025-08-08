@@ -538,15 +538,32 @@ public class EasyRouting {
         if (method.getReturnType() == void.class) {
             ctx.end();
         } else {
-            if (result instanceof Result<?> handlerResult) {
+            Result handlerResult;
+            if (result instanceof Result<?>) {
+                handlerResult = (Result<?>) result;
                 handlerResult.setResultClass(method.getReturnType());
                 handlerResult.setAnnotations(method.getAnnotations());
+                applyHttpHeaders(method, handlerResult);
                 handlerResult.handle(ctx);
             } else {
-                Result handlerResult = new Result(result);
+                handlerResult = new Result(result);
                 handlerResult.setResultClass(method.getReturnType());
                 handlerResult.setAnnotations(method.getAnnotations());
+                applyHttpHeaders(method, handlerResult);
                 handlerResult.handle(ctx);
+            }
+        }
+    }
+
+    private static void applyHttpHeaders(Method method, Result handlerResult) {
+        HttpHeaders.Headers annotation = method.getAnnotation(HttpHeaders.Headers.class);
+        if (annotation != null) {
+            for (HttpHeaders.Header header : annotation.value()) {
+                String[] headerParts = header.value().split(":");
+                if (headerParts.length == 2)
+                    handlerResult.putHeader(headerParts[0].trim(), headerParts[1].trim());
+                else
+                    logger.warn("Invalid header definition: " + header.value());
             }
         }
     }

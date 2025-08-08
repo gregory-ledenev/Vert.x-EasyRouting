@@ -292,6 +292,20 @@ User getUser(@Param("id") String id) {
 }
 ```
 
+#### @HttpHeaders.Header
+
+Use `@HttpHeaders.Header` annotation to set HTTP headers in the response. You can use it multiple times to set multiple 
+headers:
+
+```java
+@Header("content-type: text/plain")
+@Header("header1: value1")
+@Header("header2: value2")
+@GET("/multipleHeaders")
+String getMultipleHeaders() {
+    return "Multiple Headers";
+}
+```
 ### Annotating Method Parameters
 
 EasyRouting automatically tries to bind request parameters, form arguments, and

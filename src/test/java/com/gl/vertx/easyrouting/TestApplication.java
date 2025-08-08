@@ -7,7 +7,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Arrays;
+import java.util.List;
 
+import static com.gl.vertx.easyrouting.HttpHeaders.*;
 import static com.gl.vertx.easyrouting.HttpMethods.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -74,6 +76,14 @@ public class TestApplication {
             return str1 + str2 + (str3 != null && str3.isEmpty() ? "" : str3);
         }
 
+        @Header("content-type: text/plain")
+        @Header("header1: Value1")
+        @Header("header2: Value2")
+        @GET("/multipleHeaders")
+        String getMultipleHeaders() {
+            return "Multiple Headers";
+        }
+
         public TestApplicationImpl() {
             jwtAuth(JWT_PASSWORD, "/api/*");
         }
@@ -101,6 +111,35 @@ public class TestApplication {
                         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                         assertEquals(200, response.statusCode());
                         assertEquals("Hello from TestApplication!", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testMultipleHeaders() throws Throwable {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/multipleHeaders"))
+                            .GET()
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals(List.of("text/plain"), response.headers().map().get("content-type"));
+                        assertEquals(List.of("Value1"), response.headers().map().get("header1"));
+                        assertEquals(List.of("Value2"), response.headers().map().get("header2"));
+                        assertEquals("Multiple Headers", response.body());
                     } catch (Throwable e) {
                         throw new RuntimeException(e);
                     } finally {
