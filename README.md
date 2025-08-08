@@ -380,6 +380,15 @@ class lets you specify custom headers, status codes, and more. It also provides 
 scenarios. For example, to save uploaded files to the file system and then return a redirect response, your upload 
 handling method can return: `Result.saveFiles("files", fileUploads, "redirect:/")`.
 
+If you need custom processing, possibly involving direct access to context - you can create a {@code Result} with a 
+handler and return it.
+
+```java
+@GET("/testCustomHandler")
+Result<String> testCustomHandler() {
+    return new Result<>("Hello").handler((result, ctx) -> result.setResult(result.getResult() + " World!"));
+}
+```
 ## JWT Support
 
 EasyRouting supports JWT authentication and role-based authorization. To apply

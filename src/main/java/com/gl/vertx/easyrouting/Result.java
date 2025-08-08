@@ -45,6 +45,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.text.MessageFormat;
 import java.util.*;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 
 import static com.gl.vertx.easyrouting.EasyRouting.REDIRECT;
@@ -69,11 +70,12 @@ public class Result<T> {
     public static final String ROOT_PATH = "/";
     public static final String PARENT_PATH = "..";
 
-    private final T result;
+    private T result;
     private Map<String, String> headers = new HashMap<>();
     private int statusCode;
     private Annotation[] annotations;
     private Class<?> resultClass;
+    private BiConsumer<Result<T>, RoutingContext> handler;
 
     /**
      * Creates a HandlerResult for sending plain text content.
@@ -119,27 +121,23 @@ public class Result<T> {
         Objects.requireNonNull(files);
         Objects.requireNonNull(toFolder);
 
-        return new Result<>(redirect) {
-
-            @Override
-            public void handle(RoutingContext ctx) {
-                for (FileUpload fileUpload : files) {
-                    String uploadedFileName = fileUpload.uploadedFileName();
-                    String fileName = fileUpload.fileName();
-                    try {
-                        Files.copy(Path.of(uploadedFileName), Path.of(toFolder, fileName), StandardCopyOption.REPLACE_EXISTING);
-                    } catch (Exception e) {
-                        logger.error("Failed to save uploaded file: " + fileName, e);
-                        ctx.response().setStatusCode(400).end("Failed to save uploaded file: " + fileName);
-                        return;
-                    } finally {
-                        fileUpload.delete(); // delete a temp file disregarding any errors to avoid leakage
-                    }
+        return new Result<>(redirect).handler((result, ctx) -> {
+            for (FileUpload fileUpload : files) {
+                String uploadedFileName = fileUpload.uploadedFileName();
+                String fileName = fileUpload.fileName();
+                try {
+                    Files.copy(Path.of(uploadedFileName), Path.of(toFolder, fileName), StandardCopyOption.REPLACE_EXISTING);
+                } catch (Exception e) {
+                    logger.error("Failed to save uploaded file: " + fileName, e);
+                    ctx.response().setStatusCode(400).end("Failed to save uploaded file: " + fileName);
+                    return;
+                } finally {
+                    fileUpload.delete(); // delete a temp file disregarding any errors to avoid leakage
                 }
-
-                super.handle(ctx);
             }
-        };
+
+            result.defaultHandle(ctx);
+        });
     }
 
     /**
@@ -161,34 +159,29 @@ public class Result<T> {
         Objects.requireNonNull(files);
         Objects.requireNonNull(fileSaver);
 
-        return new Result<>(redirect) {
-
-            @Override
-            public void handle(RoutingContext ctx) {
-                for (FileUpload fileUpload : files) {
-                    String uploadedFileName = fileUpload.uploadedFileName();
-                    String fileName = fileUpload.fileName();
-                    if (! fileName.isEmpty()) {
-                        boolean saved = false;
-                        try {
-                            saved = fileSaver.apply(Path.of(uploadedFileName), fileName);
-                        } catch (Exception e) {
-                            logger.error("Failed to save uploaded file: " + fileName, e);
-                            ctx.response().setStatusCode(400).end("Failed to save uploaded file: " + fileName);
-                            return;
-                        }
-                        if (saved)
-                            fileUpload.delete();
-                    } else {
-                        logger.warn("Uploaded file is missing");
-                        ctx.response().setStatusCode(400).end("Uploaded file is missing");
+        return new Result<>(redirect).handler((result, ctx) -> {
+            for (FileUpload fileUpload : files) {
+                String uploadedFileName = fileUpload.uploadedFileName();
+                String fileName = fileUpload.fileName();
+                if (! fileName.isEmpty()) {
+                    boolean saved = false;
+                    try {
+                        saved = fileSaver.apply(Path.of(uploadedFileName), fileName);
+                    } catch (Exception e) {
+                        logger.error("Failed to save uploaded file: " + fileName, e);
+                        ctx.response().setStatusCode(400).end("Failed to save uploaded file: " + fileName);
                         return;
                     }
+                    if (saved)
+                        fileUpload.delete();
+                } else {
+                    logger.warn("Uploaded file is missing");
+                    ctx.response().setStatusCode(400).end("Uploaded file is missing");
+                    return;
                 }
-
-                super.handle(ctx);
             }
-        };
+            result.defaultHandle(ctx);
+        });
     }
 
     /**
@@ -403,6 +396,26 @@ public class Result<T> {
         this.statusCode = statusCode;
     }
 
+
+    /**
+     * Sets a custom handler for processing the result. This allows for custom handling logic
+     * to be applied when processing the result instead of using the default handling behavior. Handler can end
+     * response either: <br>
+     * - by calling the {@code ctx.response().end()} method, or <br>
+     * - by calling the {@code defaultHandle(RoutingContext)} method, <br>
+     * otherwise {@code defaultHandle(RoutingContext)} will be called automatically
+     * <p>TIP: if needed to continue processing with the default handler - call the {@code defaultHandle(RoutingContext)}
+     * method.
+     *
+     * @param handler A BiConsumer that takes this Result instance and a RoutingContext as parameters
+     *                and defines custom handling logic
+     * @return This Result instance for method chaining
+     */
+    public Result<T>  handler(BiConsumer<Result<T>, RoutingContext> handler) {
+        this.handler = handler;
+        return this;
+    }
+
     /**
      * Gets the result value.
      *
@@ -410,6 +423,16 @@ public class Result<T> {
      */
     public T getResult() {
         return result;
+    }
+
+
+    /**
+     * Sets the result value.
+     *
+     * @param result The result value to set
+     */
+    public void setResult(T result) {
+        this.result = result;
     }
 
     /**
@@ -449,7 +472,32 @@ public class Result<T> {
         this.headers.put(key, value);
     }
 
-    public void handle(RoutingContext ctx) {
+    protected final void handle(RoutingContext ctx) {
+        if (handler != null) {
+            handler.accept(this, ctx);
+            if (! ctx.response().ended())
+                defaultHandle(ctx);
+        } else {
+            defaultHandle(ctx);
+        }
+    }
+
+    /**
+     * Performs default handling of the result based on its type and sends the appropriate HTTP response.
+     * This method processes different types of results and configures the response accordingly:
+     * - Path: Sends a file as attachment
+     * - Buffer: Sends binary data
+     * - JsonObject/JsonArray: Sends JSON response
+     * - Map: Converts to JSON and sends
+     * - Collection/Array: Converts to JSON array and sends
+     * - Number/Boolean: Sends as plain text
+     * - String: Handles as HTML, redirect, or file based on content and annotations
+     * - Other objects: Attempts to convert to JSON or falls back to toString()
+     *
+     * @param ctx The Vert.x routing context to handle the response
+     * @throws HttpException if there's an error during response processing
+     */
+    public void defaultHandle(RoutingContext ctx) {
         try {
             addAnnotatedHeaders();
 

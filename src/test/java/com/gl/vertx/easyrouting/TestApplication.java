@@ -84,6 +84,12 @@ public class TestApplication {
             return "Multiple Headers";
         }
 
+        @GET("/testCustomHandler")
+        Result<String> testCustomHandler() {
+            return new Result<>("Hello").handler((result, ctx) ->
+                    result.setResult(result.getResult() + " World!"));
+        }
+
         public TestApplicationImpl() {
             jwtAuth(JWT_PASSWORD, "/api/*");
         }
@@ -111,6 +117,32 @@ public class TestApplication {
                         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                         assertEquals(200, response.statusCode());
                         assertEquals("Hello from TestApplication!", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testCustomHandler() throws Throwable {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/testCustomHandler"))
+                            .GET()
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("Hello World!", response.body());
                     } catch (Throwable e) {
                         throw new RuntimeException(e);
                     } finally {
