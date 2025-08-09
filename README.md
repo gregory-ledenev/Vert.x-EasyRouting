@@ -441,11 +441,19 @@ format handling seamless and flexible.
 
 ### @ConvertsTo Annotation
 
-Use `@ConvertsTo` annotation to define methods that convert Java objects to specific content types for response output.
-This is useful when you want to return custom formatted data from your handler methods.
+`@ConvertsTo` annotation that marks a method as a converter which transforms the input value into a result according to
+a specified content type. Such converters will be used to convert result values. Input type is explicitly defined by the
+converter method's single parameter.
+The contract for conversion methods:
+- Must be a public (and static if needed) method.
+- Must accept exactly one parameter of any type that defines a type of the objects to convert from.
+- Must return a non-void type compatible with the specified content type.
+- Must not throw checked exceptions.
 
+For example, the following converter converts objects of the `User` type to objects that correspond to the _"text/plain"_
+content type:
 ```java
-@ConvertsTo(contentType = "text/plain", from = User.class)
+@ConvertsTo("text/user-string")
 public String convertUserToText(User user) {
     return user.toString();
 }
@@ -453,12 +461,22 @@ public String convertUserToText(User user) {
 
 ### @ConvertsFrom Annotation
 
-Use `@ConvertsFrom` annotation to define methods that convert incoming request data from specific content types to Java
-objects. This enables parsing of custom data formats in request bodies.
+@ConvertsFrom annotation used to mark methods that convert input data from specific content types into target objects.
+Such converters will be used to convert body values to appropriate objects. Output type is explicitly defined by the
+converter method's return type.
 
+The contract for conversion methods:
+- Must be a public method.
+- Must accept exactly one parameter: input content that corresponds to the content type defined by annotation.
+- Must be non-void, where the return type defines the object's type to convert to.
+- Must not throw checked exceptions.
+
+For example, the following converter converts objects that correspond to the _"text/user-string"_ content type to objects
+of the `User` type:
 ```java
-@ConvertsFrom(contentType="text/plain" to=User.class)
+@ConvertsFrom("text/user-string")
 public User convertUserFromText(String text) {
+    // Convert text to User object
     return User.of(text);
 }
 ```

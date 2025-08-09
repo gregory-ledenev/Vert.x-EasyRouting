@@ -300,12 +300,12 @@ public class EasyRouting {
     private static class RoutingContextHandler implements Handler<RoutingContext> {
         private final Annotation annotation;
         private final Object target;
-        private final ConvertersCache convertersCache;
+        private final AnnotatedConverters convertersCache;
 
         public RoutingContextHandler(Annotation annotation, Object target) {
             this.annotation = annotation;
             this.target = target;
-            this.convertersCache = new ConvertersCache(target);
+            this.convertersCache = new AnnotatedConverters(target);
         }
 
         @Override
@@ -497,54 +497,43 @@ public class EasyRouting {
             if (body == null) {
                 return null;
             }
-            Object convertedBody = convertUsingAnnotatedConverter(contentType, parameterType, body);
-            if (convertedBody != null)
-                return convertedBody;
-
-            return convertValue(parameterType, body);
+            Object convertedBody = convertFrom(contentType, parameterType, body);
+            return convertValue(convertedBody, parameterType);
         }
 
-        private Object convertValue(Class<?> type, Object value) {
-            if (type == String.class) {
+        static Object convertValue(Object value, Class<?> to) {
+            if (to == String.class) {
                 return value.toString();
-            } else if (type == JsonObject.class) {
+            } else if (to == JsonObject.class) {
                 return value instanceof JsonObject jsonObject ? jsonObject : new JsonObject(value.toString());
-            } else if (type == JsonArray.class) {
+            } else if (to == JsonArray.class) {
                 return value instanceof JsonArray jsonArray ? jsonArray : new JsonArray(value.toString());
-            } else if (type == Integer.class || type == int.class) {
+            } else if (to == Integer.class || to == int.class) {
                 return Integer.parseInt(value.toString());
-            } else if (type == Long.class || type == long.class) {
+            } else if (to == Long.class || to == long.class) {
                 return Long.parseLong(value.toString());
-            } else if (type == Double.class || type == double.class) {
+            } else if (to == Double.class || to == double.class) {
                 return Double.parseDouble(value.toString());
-            } else if (type == Boolean.class || type == boolean.class) {
+            } else if (to == Boolean.class || to == boolean.class) {
                 return Boolean.parseBoolean(value.toString());
-            } else if (type == Buffer.class) {
+            } else if (to == Buffer.class) {
                 return value instanceof Buffer buffer ? buffer : Buffer.buffer(value.toString());
-            } else if (!type.isPrimitive() && !type.isArray()) {
+            } else if (!to.isPrimitive() && !to.isArray()) {
                 try {
-                    return new JsonMapper().readValue(value.toString(), type);
+                    return new JsonMapper().readValue(value.toString(), to);
                 } catch (Exception e) {
-                    throw new IllegalArgumentException("Failed to convert value to " + type.getName(), e);
+                    throw new IllegalArgumentException("Failed to convert value to " + to.getName(), e);
                 }
             }
 
-            throw new IllegalArgumentException("Unsupported value type: " + type);
+            throw new IllegalArgumentException("Unsupported value type: " + to);
         }
 
-        private Object convertUsingAnnotatedConverter(String contentType, Class<?> type, Object value) {
-            if (value != null && contentType != null) {
-                Method method = convertersCache.getConverter(contentType, type);
-                if (method != null) {
-                    try {
-                        return method.invoke(target, convertValue(method.getParameterTypes()[0], value));
-                    } catch (Exception e) {
-                        logger.error("Error converting value using @ConvertFrom method: " + method.getName(), e);
-                        throw new RuntimeException(e);
-                    }
-                }
-            }
-            return null;
+        private Object convertFrom(String contentType, Class<?> type, Object value) {
+            Object result = value;
+            if (value != null && contentType != null)
+                result = convertersCache.convert(result, contentType, type);
+            return result;
         }
 
         private Object convertValue(String parameterName, Class<?> parameterType, MultiMap parameters, String defaultValue) {
@@ -592,17 +581,8 @@ public class EasyRouting {
         private Object convertTo(Object target, Object result, String contentType) {
             Object convertedResult = result;
 
-            if (result != null && contentType != null) {
-                Method method = convertersCache.getConverter(result.getClass(), contentType);
-                if (method != null) {
-                    try {
-                        convertedResult = method.invoke(target, result);
-                    } catch (Exception e) {
-                        logger.error("Error converting result using @ConvertsTo method: " + method.getName(), e);
-                        throw new RuntimeException(e);
-                    }
-                }
-            }
+            if (result != null && contentType != null)
+                convertedResult = convertersCache.convert(result, result.getClass(), contentType);
 
             return convertedResult;
         }
@@ -625,8 +605,8 @@ public class EasyRouting {
         }
     }
 
-    private static class ConvertersCache {
-        public ConvertersCache(Object target) {
+    private static class AnnotatedConverters {
+        public AnnotatedConverters(Object target) {
             this.cache = cacheConverters(target);
         }
 
@@ -637,29 +617,24 @@ public class EasyRouting {
 
             for (Method method : target.getClass().getDeclaredMethods()) {
                 ConvertsTo convertsTo = method.getAnnotation(ConvertsTo.class);
-                if (convertsTo != null &&
-                        method.getParameterCount() == 1 &&
-                        method.getParameterTypes()[0].isAssignableFrom(convertsTo.from())) {
-                    result.put(keyFor(convertsTo), method);
-                }
+                if (convertsTo != null && method.getParameterCount() == 1)
+                    result.put(keyFor(convertsTo, method.getParameterTypes()[0]), method);
 
                 ConvertsFrom convertsFrom = method.getAnnotation(ConvertsFrom.class);
-                if (convertsFrom != null &&
-                        method.getParameterCount() == 1 &&
-                        method.getReturnType().isAssignableFrom(convertsFrom.to())) {
-                    result.put(keyFor(convertsFrom), method);
+                if (convertsFrom != null && ! method.getReturnType().equals(void.class)) {
+                    result.put(keyFor(convertsFrom, method.getReturnType()), method);
                 }
             }
 
             return Collections.unmodifiableMap(result);
         }
 
-        private String keyFor(ConvertsTo converter) {
-            return converter.from() + ":" + converter.contentType();
+        private String keyFor(ConvertsTo converter, Class<?> type) {
+            return type + ":" + converter.value();
         }
 
-        private String keyFor(ConvertsFrom converter) {
-            return converter.contentType() + ":" + converter.to();
+        private String keyFor(ConvertsFrom converter, Class<?> type) {
+            return converter.value() + ":" + type;
         }
 
         public Method getConverter(Class<?> from , String to) {
@@ -670,15 +645,10 @@ public class EasyRouting {
                 }
 
                 @Override
-                public Class<?> from() {
-                    return from;
-                }
-
-                @Override
-                public String contentType() {
+                public String value() {
                     return to;
                 }
-            }));
+            }, from));
         }
 
         public Method getConverter(String from , Class<?> to) {
@@ -689,16 +659,38 @@ public class EasyRouting {
                 }
 
                 @Override
-                public String contentType() {
+                public String value() {
                     return from;
                 }
-
-                @Override
-                public Class<?> to() {
-                    return to;
+            }, to));
+        }
+        
+        public Object convert(Object value, String from , Class<?> to) {
+            Method method = getConverter(from , to);
+            if (method != null) {
+                try {
+                    return method.invoke(this, RoutingContextHandler.convertValue(value, method.getParameterTypes()[0]));
+                } catch (Exception e) {
+                    logger.error("Error converting value using @ConvertsTo method: " + method.getName(), e);
+                    throw new RuntimeException(e);
                 }
-            }));
+            } else {
+                return value;
+            }
         }
 
+        public Object convert(Object value, Class<?> from, String to) {
+            Method method = getConverter(from, to);
+            if (method != null) {
+                try {
+                    return method.invoke(value, value);
+                } catch (Exception e) {
+                    logger.error("Error converting value using @ConvertsFrom method: " + method.getName(), e);
+                    throw new RuntimeException(e);
+                }
+            } else {
+                return value;
+            }
+        }
     }
 }

@@ -102,13 +102,13 @@ public class TestApplication {
             return user;
         }
 
-        @ConvertsTo(contentType ="text/user-string", from=User.class)
-        String convertUserToString(User user) {
+        @ConvertsTo("text/user-string")
+        static String convertUserToString(User user) {
             return user.toString();
         }
 
-        @ConvertsFrom(contentType ="text/user-string", to=User.class)
-        User convertUserFromString(String content) {
+        @ConvertsFrom("text/user-string")
+        static User convertUserFromString(String content) {
             return User.of(content);
         }
 

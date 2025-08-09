@@ -35,6 +35,7 @@ public class UserAdminApplication extends Application {
         new UserAdminApplication(new LoginService(), new UserService()).
                 jwtAuth(JWT_SECRET, "/api/*").
                 sslWithJks("keystore", "1234567890").
+                handleShutdown().
                 start();
     }
 
