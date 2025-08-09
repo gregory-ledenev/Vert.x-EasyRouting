@@ -278,6 +278,7 @@ public class Application {
      * @throws IllegalStateException if attempting to register a module after the application has started
      */
     public Application module(ApplicationModule<?> applicationModule) {
+        Objects.requireNonNull(applicationModule);
         if (isRunning())
             throw new IllegalStateException("Cannot register application module after application has started");
         applicationModules.add(applicationModule);
