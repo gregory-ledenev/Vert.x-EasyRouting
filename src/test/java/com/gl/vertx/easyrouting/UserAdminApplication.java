@@ -88,7 +88,7 @@ public class UserAdminApplication extends Application {
         return userService.deleteUser(id);
     }
 
-    @HandleStatusCode(401)
+    @HandlesStatusCode(401)
     @GET("/unauthenticated")
     Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
         return new Result<>("You are not unauthenticated to access this: " + redirect, 401);

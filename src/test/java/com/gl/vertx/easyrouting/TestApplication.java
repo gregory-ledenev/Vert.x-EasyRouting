@@ -31,7 +31,7 @@ public class TestApplication {
         @GET(value = "/blockingHello")
         String blockingHello() {
             try {
-                Thread.sleep(5000);
+                Thread.sleep(5000); // simulate a long-running task
             } catch (InterruptedException e) {
                 // do nothing
             }
@@ -50,7 +50,7 @@ public class TestApplication {
             return JWTUtil.generateToken(getVertx(), user, Arrays.asList(role.split(",")), JWT_PASSWORD);
         }
 
-        @HandleStatusCode(401)
+        @HandlesStatusCode(401)
         @GET(value = "/loginForm")
         String loginForm(@OptionalParam("redirect") String redirect) {
             return "Login Form - redirect back to: " + redirect;
@@ -90,6 +90,28 @@ public class TestApplication {
                     result.setResult(result.getResult() + " World!"));
         }
 
+        @ContentType("text/user-string")
+        @GET("/testConversionTo")
+        User testConversionTo() {
+            return new User("John Doe", "john.doe@gmail.com");
+        }
+
+        @ContentType("text/user-string")
+        @POST("/testConversionFrom")
+        User testConversionFrom(@BodyParam("user") User user) {
+            return user;
+        }
+
+        @ConvertsTo(contentType ="text/user-string", from=User.class)
+        String convertUserToString(User user) {
+            return user.toString();
+        }
+
+        @ConvertsFrom(contentType ="text/user-string", to=User.class)
+        User convertUserFromString(String content) {
+            return User.of(content);
+        }
+
         public TestApplicationImpl() {
             jwtAuth(JWT_PASSWORD, "/api/*");
         }
@@ -99,6 +121,14 @@ public class TestApplication {
                     .onStartCompletion(Application::waitForInput)
                     .handleShutdown()
                     .start(8080);
+        }
+    }
+
+    record User(String name, String email) {
+        public static User of(String content) {
+            String content2 = content.substring(content.indexOf("[") + 1, content.indexOf("]"));
+            String[] parts = content2.split(",\\s*", 2);
+            return new User(parts[0].substring(parts[0].indexOf("=") + 1), parts[1].substring(parts[1].indexOf("=") + 1));
         }
     }
 
@@ -143,6 +173,61 @@ public class TestApplication {
                         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                         assertEquals(200, response.statusCode());
                         assertEquals("Hello World!", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testConversionTo() throws Throwable {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/testConversionTo"))
+                            .GET()
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("text/user-string", response.headers().map().get("content-type").get(0));
+                        assertEquals("User[name=John Doe, email=john.doe@gmail.com]", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testConversionFrom() throws Throwable {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/testConversionFrom"))
+                            .header("Content-Type", "text/user-string")
+                            .POST(HttpRequest.BodyPublishers.ofString("User[name=John Doe, email=john.doe@gmail.com]"))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("text/user-string", response.headers().map().get("content-type").get(0));
+                        assertEquals("User[name=John Doe, email=john.doe@gmail.com]", response.body());
                     } catch (Throwable e) {
                         throw new RuntimeException(e);
                     } finally {

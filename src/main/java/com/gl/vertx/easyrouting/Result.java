@@ -499,8 +499,6 @@ public class Result<T> {
      */
     public void defaultHandle(RoutingContext ctx) {
         try {
-            addAnnotatedHeaders();
-
             headers.forEach(ctx.response()::putHeader);
 
             ctx.response().setStatusCode(statusCode);
@@ -538,17 +536,6 @@ public class Result<T> {
         } catch (Exception e) {
             logger.error("Error handling result: ", e);
             ctx.response().setStatusCode(500).end();
-        }
-    }
-
-    private void addAnnotatedHeaders() {
-        if (annotations != null) {
-            for (Annotation annotation : annotations) {
-                if (annotation instanceof ContentType contentType) {
-                    if (! headers.containsKey(CONTENT_TYPE))
-                        headers.put(CONTENT_TYPE, contentType.value());
-                }
-            }
         }
     }
 

@@ -171,7 +171,7 @@ public class Application {
 ## Adding and Configuring Handler Methods
 
 To create handler methods in your controller classes, define usual Java methods
-that handle requests and produce response and annotate them with one of the HTTP 
+that handle requests and produce response and annotate them with one of the HTTP
 method annotations:
 
 - `@GET(path)` - For HTTP GET requests
@@ -186,11 +186,13 @@ method annotations:
 
 Use `@GET`, `@POST`, `@PUT`, `@DELETE`, or `@PATCH` annotations to define
 handler methods for specific HTTP methods. The `value` parameter specifies the
-URL path for the handler. You may use the the optional `requiredRoles` parameter 
-to specify required roles for the method, which will be checked during JWT 
-authentication. If nor roles are specified, the method will be accessible to all 
+URL path for the handler. You may use the the optional `requiredRoles` parameter
+to specify required roles for the method, which will be checked during JWT
+authentication. If nor roles are specified, the method will be accessible to all
 authenticated users.
+
 ```java
+
 @DELETE(value = "/api/users/:id", requiredRoles = {"admin"})
 boolean deleteUser(@Param("id") String id) {
     return userService.deleteUser(id);
@@ -200,13 +202,14 @@ boolean deleteUser(@Param("id") String id) {
 #### @Blocking
 
 Use `@Blocking` annotation to mark methods that should be executed as blocking
-operations. When applied to a method, it indicates that the method's execution 
+operations. When applied to a method, it indicates that the method's execution
 will be automatically processed on a worker thread rather than the event loop,
 preventing the event loop from being blocked. Use this annotation to mark
-operations that may take a long time and to safely add any blocking code to 
+operations that may take a long time and to safely add any blocking code to
 such methods.
 
 ```java
+
 @Blocking
 @GET(value = "/blockingHello")
 String blockingHello() {
@@ -223,6 +226,7 @@ String blockingHello() {
 Use `@Form` annotation to mark methods that should handle form data:
 
 ```java
+
 @Form
 @POST("/loginForm")
 String loginForm(@Param("user") String user, @Param("password") String password) {
@@ -235,6 +239,7 @@ String loginForm(@Param("user") String user, @Param("password") String password)
 Use `@ContentType` annotation to set the response content type:
 
 ```java
+
 @GET("/text")
 @ContentType("text/plain")
 String getText() {
@@ -248,6 +253,7 @@ Use `@HandleStatusCode` annotation to specify that a method handles specific err
 with codes:
 
 ```java
+
 @HandleStatusCode(401)
 @GET("/unauthenticated")
 Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
@@ -260,6 +266,7 @@ Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
 Use `@FileFromFolder` annotation to serve static files from the file system:
 
 ```java
+
 @GET("/*")
 @FileFromFolder("document")
 String get(@PathParam("path") String path) {
@@ -272,6 +279,7 @@ String get(@PathParam("path") String path) {
 Use `@FileFromResource` annotation to serve static files from the classpath:
 
 ```java
+
 @GET("/*")
 @FileFromResource(UserAdminApplication.class)
 String get(@PathParam("path") String path) {
@@ -285,6 +293,7 @@ Use `@NotNullResult` annotation to return some response with text and code if
 the annotated method returns null:
 
 ```java
+
 @GET("/api/users/:id")
 @NotNullResult(value = "No user found", statusCode = 404)
 User getUser(@Param("id") String id) {
@@ -294,10 +303,11 @@ User getUser(@Param("id") String id) {
 
 #### @HttpHeaders.Header
 
-Use `@HttpHeaders.Header` annotation to set HTTP headers in the response. You can use it multiple times to set multiple 
+Use `@HttpHeaders.Header` annotation to set HTTP headers in the response. You can use it multiple times to set multiple
 headers:
 
 ```java
+
 @Header("content-type: text/plain")
 @Header("header1: value1")
 @Header("header2: value2")
@@ -306,6 +316,7 @@ String getMultipleHeaders() {
     return "Multiple Headers";
 }
 ```
+
 ### Annotating Method Parameters
 
 EasyRouting automatically tries to bind request parameters, form arguments, and
@@ -329,6 +340,7 @@ Use `@Param` annotation to bind request parameters or form arguments to method
 parameters:
 
 ```java
+
 @HttpMethods.GET("/users/search")
 public List<User> searchUsers(@Param("name") String name, @Param("age") Integer age) {
     // Access query parameters like /users/search?name=John&age=30
@@ -341,6 +353,7 @@ Use the `@OptionalParam` annotation to bind optional request parameters or form
 arguments to method parameters:
 
 ```java
+
 @HttpMethods.GET("/users/search")
 public List<User> searchUsers(@Param("name") String name, @OptionalParam("age") Integer age) {
     // Access query parameters like /users/search?name=John&age=30
@@ -352,6 +365,7 @@ public List<User> searchUsers(@Param("name") String name, @OptionalParam("age") 
 Use the `@BodyParam` annotation to bind HTTP body content to a method parameter:
 
 ```java
+
 @HttpMethods.POST("/users")
 public User createUser(@BodyParam("user") User user) {
     // Automatically converts JSON to User object
@@ -364,31 +378,36 @@ Use the `@UploadsParam` annotation to bind a list of uploaded files to a method
 parameter. Note: the method parameter must be a `List<FileUpload>`.
 
 ```java
+
 @POST("/files/uploadFile")
 public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @UploadsParam List<FileUpload> fileUploads) {
     return Result.saveFiles("files", fileUploads, "redirect:/");
 }
 ```
+
 ### Returning Results
 
 EasyRouting simplifies handling method results by:
+
 - Automatically converting Java objects to JSON when needed.
 - Determining and setting the appropriate content type for the response.
 
-If you need more control and want to return a custom response, you can return an instance of the Result class. This 
-class lets you specify custom headers, status codes, and more. It also provides convenient factory methods for common 
-scenarios. For example, to save uploaded files to the file system and then return a redirect response, your upload 
+If you need more control and want to return a custom response, you can return an instance of the Result class. This
+class lets you specify custom headers, status codes, and more. It also provides convenient factory methods for common
+scenarios. For example, to save uploaded files to the file system and then return a redirect response, your upload
 handling method can return: `Result.saveFiles("files", fileUploads, "redirect:/")`.
 
-If you need custom processing, possibly involving direct access to context - you can create a {@code Result} with a 
+If you need custom processing, possibly involving direct access to context - you can create a {@code Result} with a
 handler and return it.
 
 ```java
+
 @GET("/testCustomHandler")
 Result<String> testCustomHandler() {
     return new Result<>("Hello").handler((result, ctx) -> result.setResult(result.getResult() + " World!"));
 }
 ```
+
 ## JWT Support
 
 EasyRouting supports JWT authentication and role-based authorization. To apply
@@ -404,19 +423,54 @@ specifying them as `requiredRoles` in the
 `@GET`, `@POST` etc. annotations:
 
 ```java
+
 @HttpMethods.GET("/users/:id", requiredRoles = {"admin"})
 public User getUser(@Param("id") int userId) {
     // ...
 }
 ```
 
+## Data Conversion
+
+EasyRouting provides a powerful custom data conversion system that allows you to define how objects are converted
+between different content types. This enables you to handle custom data formats and serialization beyond the default
+JSON support. This is done by defining methods annotated with `@ConvertsTo` and `@ConvertsFrom` that convert Java
+objects to and from specific content types for response output. The conversion system automatically detects and applies the
+appropriate converters based on the method return types, parameter types, and specified content types, making data
+format handling seamless and flexible.
+
+### @ConvertsTo Annotation
+
+Use `@ConvertsTo` annotation to define methods that convert Java objects to specific content types for response output.
+This is useful when you want to return custom formatted data from your handler methods.
+
+```java
+@ConvertsTo(contentType = "text/plain", from = User.class)
+public String convertUserToText(User user) {
+    return user.toString();
+}
+```
+
+### @ConvertsFrom Annotation
+
+Use `@ConvertsFrom` annotation to define methods that convert incoming request data from specific content types to Java
+objects. This enables parsing of custom data formats in request bodies.
+
+```java
+@ConvertsFrom(contentType="text/plain" to=User.class)
+public User convertUserFromText(String text) {
+    return User.of(text);
+}
+```
+
 ## Error Handling
 
 EasyRouting supports error handling by binding HTTP error codes to handler
-methods using `@HandleStatusCode` annotations:
+methods using `@HandlesStatusCode` annotations:
 
 ```java
-@HandleStatusCode(401)
+
+@HandlesStatusCode(401)
 @GET("/loginForm")
 public String loginForm(@OptionalParam("redirect") String redirect) {
     ...
@@ -431,7 +485,7 @@ folder that demonstrate various features of the EasyRouting library:
 
 - **FilesApplication**: demonstrates file upload and download handling
 - **UserAdminApplication**: demonstrates sample user management application with
-  handling static pages, implementing API, JWT authentication and role-based 
+  handling static pages, implementing API, JWT authentication and role-based
   authorization, and SSL support
 - **TestApplication**: demonstrates using EasyRouting Application class for
   prototyping and testing

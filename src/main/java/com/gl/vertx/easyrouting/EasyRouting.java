@@ -39,7 +39,7 @@ import io.vertx.ext.web.handler.HttpException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.annotation.Annotation;
+import java.lang.annotation.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -50,6 +50,7 @@ import java.util.*;
 
 import static com.gl.vertx.easyrouting.HttpMethods.*;
 import static com.gl.vertx.easyrouting.JWTUtil.ROLES;
+import static com.gl.vertx.easyrouting.Result.CONTENT_TYPE;
 
 /**
  * EasyRouting provides annotation-based HTTP request handling for Vert.x web applications. It simplifies route
@@ -130,7 +131,7 @@ public class EasyRouting {
 
         all:
         for (Method method : target.getClass().getDeclaredMethods()) {
-            HandleStatusCode statusCodeAnnotation = method.getAnnotation(HandleStatusCode.class);
+            HandlesStatusCode statusCodeAnnotation = method.getAnnotation(HandlesStatusCode.class);
             if (statusCodeAnnotation != null && statusCodeAnnotation.value() == statusCode) {
                 Annotation methodAnnotation = method.getAnnotation(GET.class);
                 if (methodAnnotation != null) {
@@ -293,12 +294,26 @@ public class EasyRouting {
     }
 
     private static Handler<RoutingContext> createHandler(Annotation annotation, Object target) {
-        return ctx -> {
+        return new RoutingContextHandler(annotation, target);
+    }
+
+    private static class RoutingContextHandler implements Handler<RoutingContext> {
+        private final Annotation annotation;
+        private final Object target;
+        private final ConvertersCache convertersCache;
+
+        public RoutingContextHandler(Annotation annotation, Object target) {
+            this.annotation = annotation;
+            this.target = target;
+            this.convertersCache = new ConvertersCache(target);
+        }
+
+        @Override
+        public void handle(RoutingContext ctx) {
             try {
                 MethodResult handlerMethod = getMethod(annotation,
                         ctx.request().params(),
-                        ctx.request().method() == HttpMethod.POST ? ctx.request().formAttributes() : null,
-                        target);
+                        ctx.request().method() == HttpMethod.POST ? ctx.request().formAttributes() : null);
                 if (handlerMethod == null) {
                     logger.error("No handler method for: \"" + annotation + "\" and parameters: " + ctx.request().params().names());
                     ctx.response().setStatusCode(404).end();
@@ -308,7 +323,7 @@ public class EasyRouting {
                         Buffer bodyBuffer = ctx.getBody();
                         try {
                             Object[] args = methodParameterValues(ctx, handlerMethod.method(), handlerMethod.parameterNames, handlerMethod.method().getParameterTypes(), ctx.request().params(), bodyBuffer);
-                            invokeHandlerMethod(target, ctx, handlerMethod, args);
+                            invokeHandlerMethod(ctx, handlerMethod, args);
                         } catch (Exception e) {
                             ctx.response()
                                     .setStatusCode(500)
@@ -318,7 +333,7 @@ public class EasyRouting {
                         }
                     } else {
                         Object[] args = methodParameterValues(ctx, handlerMethod.method(), handlerMethod.parameterNames, handlerMethod.method().getParameterTypes(), ctx.request().params(), null);
-                        invokeHandlerMethod(target, ctx, handlerMethod, args);
+                        invokeHandlerMethod(ctx, handlerMethod, args);
                     }
                 } else {
                     throw new HttpException(403, "Access denied"); // exception to let failure handler handle it
@@ -330,241 +345,360 @@ public class EasyRouting {
                 errorHandlerInvocation(annotation, ctx.request().params().names(), e);
                 throw new HttpException(500, e);
             }
-        };
-    }
-
-    private static void invokeHandlerMethod(Object target, RoutingContext ctx, MethodResult handlerMethod, Object[] args) throws IllegalAccessException, InvocationTargetException {
-        if (handlerMethod.method().isAnnotationPresent(Blocking.class)) {
-            ctx.vertx().executeBlocking(promise -> {
-                // Blocking operation
-                Object result = null;
-                try {
-                    result = handlerMethod.method().invoke(target, args);
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-                promise.complete(result);
-            }, res -> {
-                if (res.succeeded()) {
-                    processHandlerResult(handlerMethod.method(), ctx, res.result());
-                } else {
-                    if (res.cause() instanceof RuntimeException)
-                        throw (RuntimeException) res.cause();
-                    else
-                        throw new RuntimeException(res.cause());
-                }
-            });
-        } else {
-            Object result = handlerMethod.method().invoke(target, args);
-            processHandlerResult(handlerMethod.method(), ctx, result);
         }
-    }
 
-    private static void errorHandlerInvocation(Annotation annotation, Set<String> parameterNames, Exception exception) {
-        logger.error(MessageFormat.format(ERROR_HANDLING_ANNOTATED_METHOD,
-                annotation,
-                String.join(", ", parameterNames),
-                exception));
-    }
-
-    record MethodResult(Method method, String[] parameterNames, boolean hasBodyParam) {
-    }
-
-    private static boolean warnedAboutMissingParameterNames = false;
-
-    private static MethodResult getMethod(Annotation annotation,
-                                          MultiMap parameters,
-                                          MultiMap formAttributes,
-                                          Object target) {
-        MultiMap lowercaseParams = MultiMap.caseInsensitiveMultiMap();
-        lowercaseParams.addAll(parameters);
-
-        MultiMap lowercaseFormAttributes = formAttributes != null ? MultiMap.caseInsensitiveMultiMap() : null;
-        if (lowercaseFormAttributes != null)
-            lowercaseFormAttributes.addAll(formAttributes);
-
-        for (Method method : target.getClass().getDeclaredMethods()) {
-            Annotation methodAnnotation = method.getAnnotation(annotation.annotationType());
-            if (methodAnnotation != null && methodAnnotation.equals(annotation)) {
-                List<String> paramNames = new ArrayList<>();
-                int matchedParamCount = 0;
-                int optionalParamCount = 0;
-                int otherParamCount = 0;
-                boolean hasBodyParam = false;
-                boolean isFormHandler = method.getAnnotation(Form.class) != null;
-
-                Annotation[][] parameterAnnotations = method.getParameterAnnotations();
-                for (Parameter parameter : method.getParameters()) {
-
-                    if (parameter.getAnnotation(Param.class) != null) {
-                        Param param = parameter.getAnnotation(Param.class);
-                        paramNames.add(param.value());
-                        String lowerCaseParam = param.value().toLowerCase();
-                        if (lowercaseParams.get(lowerCaseParam) != null)
-                            matchedParamCount++;
-                        else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
-                            otherParamCount++;
-                    } else if (parameter.getAnnotation(OptionalParam.class) != null) {
-                        OptionalParam param = parameter.getAnnotation(OptionalParam.class);
-                        paramNames.add(param.value());
-                        matchedParamCount++;
-                        String lowerCaseParam = param.value().toLowerCase();
-                        if (lowercaseParams.get(lowerCaseParam) == null)
-                            optionalParamCount++;
-                        else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
-                            otherParamCount++;
-                    } else if (parameter.getAnnotation(BodyParam.class) != null) {
-                        BodyParam param = parameter.getAnnotation(BodyParam.class);
-                        otherParamCount++;
-                        hasBodyParam = true;
-                        paramNames.add(param.value());
-                    } else if (parameter.getAnnotation(PathParam.class) != null) {
-                        PathParam param = parameter.getAnnotation(PathParam.class);
-                        otherParamCount++;
-                        paramNames.add(param.value());
-                    } else if (parameter.getAnnotation(UploadsParam.class) != null) {
-                        otherParamCount++;
-                        paramNames.add("uploads");
+        private void invokeHandlerMethod(RoutingContext ctx, MethodResult handlerMethod, Object[] args) throws IllegalAccessException, InvocationTargetException {
+            if (handlerMethod.method().isAnnotationPresent(Blocking.class)) {
+                ctx.vertx().executeBlocking(promise -> {
+                    // Blocking operation
+                    Object result = null;
+                    try {
+                        result = handlerMethod.method().invoke(target, args);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                    promise.complete(result);
+                }, res -> {
+                    if (res.succeeded()) {
+                        processHandlerResult(handlerMethod.method(), ctx, res.result());
                     } else {
-                        if (parameter.getName().matches("arg\\d+") && ! warnedAboutMissingParameterNames) {
-                            warnedAboutMissingParameterNames = true;
-                            logger.warn("Parameter names are missing. Either use @Param annotations or compile project with -parameters option");
-                        }
-                        paramNames.add(parameter.getName());
-                        String lowerCaseParam = parameter.getName().toLowerCase();
-                        if (lowercaseParams.get(lowerCaseParam) != null)
+                        if (res.cause() instanceof RuntimeException)
+                            throw (RuntimeException) res.cause();
+                        else
+                            throw new RuntimeException(res.cause());
+                    }
+                });
+            } else {
+                Object result = handlerMethod.method().invoke(target, args);
+                processHandlerResult(handlerMethod.method(), ctx, result);
+            }
+        }
+
+        private static void errorHandlerInvocation(Annotation annotation, Set<String> parameterNames, Exception exception) {
+            logger.error(MessageFormat.format(ERROR_HANDLING_ANNOTATED_METHOD,
+                    annotation,
+                    String.join(", ", parameterNames),
+                    exception));
+        }
+
+        record MethodResult(Method method, String[] parameterNames, boolean hasBodyParam) {
+        }
+
+        private static boolean warnedAboutMissingParameterNames = false;
+
+        private MethodResult getMethod(Annotation annotation,
+                                              MultiMap parameters,
+                                              MultiMap formAttributes) {
+            MultiMap lowercaseParams = MultiMap.caseInsensitiveMultiMap();
+            lowercaseParams.addAll(parameters);
+
+            MultiMap lowercaseFormAttributes = formAttributes != null ? MultiMap.caseInsensitiveMultiMap() : null;
+            if (lowercaseFormAttributes != null)
+                lowercaseFormAttributes.addAll(formAttributes);
+
+            for (Method method : target.getClass().getDeclaredMethods()) {
+                Annotation methodAnnotation = method.getAnnotation(annotation.annotationType());
+                if (methodAnnotation != null && methodAnnotation.equals(annotation)) {
+                    List<String> paramNames = new ArrayList<>();
+                    int matchedParamCount = 0;
+                    int optionalParamCount = 0;
+                    int otherParamCount = 0;
+                    boolean hasBodyParam = false;
+                    boolean isFormHandler = method.getAnnotation(Form.class) != null;
+
+                    Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+                    for (Parameter parameter : method.getParameters()) {
+
+                        if (parameter.getAnnotation(Param.class) != null) {
+                            Param param = parameter.getAnnotation(Param.class);
+                            paramNames.add(param.value());
+                            String lowerCaseParam = param.value().toLowerCase();
+                            if (lowercaseParams.get(lowerCaseParam) != null)
+                                matchedParamCount++;
+                            else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
+                                otherParamCount++;
+                        } else if (parameter.getAnnotation(OptionalParam.class) != null) {
+                            OptionalParam param = parameter.getAnnotation(OptionalParam.class);
+                            paramNames.add(param.value());
                             matchedParamCount++;
-                        else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
+                            String lowerCaseParam = param.value().toLowerCase();
+                            if (lowercaseParams.get(lowerCaseParam) == null)
+                                optionalParamCount++;
+                            else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
+                                otherParamCount++;
+                        } else if (parameter.getAnnotation(BodyParam.class) != null) {
+                            BodyParam param = parameter.getAnnotation(BodyParam.class);
                             otherParamCount++;
+                            hasBodyParam = true;
+                            paramNames.add(param.value());
+                        } else if (parameter.getAnnotation(PathParam.class) != null) {
+                            PathParam param = parameter.getAnnotation(PathParam.class);
+                            otherParamCount++;
+                            paramNames.add(param.value());
+                        } else if (parameter.getAnnotation(UploadsParam.class) != null) {
+                            otherParamCount++;
+                            paramNames.add("uploads");
+                        } else {
+                            if (parameter.getName().matches("arg\\d+") && ! warnedAboutMissingParameterNames) {
+                                warnedAboutMissingParameterNames = true;
+                                logger.warn("Parameter names are missing. Either use @Param annotations or compile project with -parameters option");
+                            }
+                            paramNames.add(parameter.getName());
+                            String lowerCaseParam = parameter.getName().toLowerCase();
+                            if (lowercaseParams.get(lowerCaseParam) != null)
+                                matchedParamCount++;
+                            else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
+                                otherParamCount++;
+                        }
+                    }
+
+                    int totalParamCount = matchedParamCount + otherParamCount;
+                    if (method.getParameterCount() == totalParamCount && matchedParamCount == parameters.size() + optionalParamCount) {
+                        return new MethodResult(method, paramNames.toArray(new String[0]), hasBodyParam);
                     }
                 }
-
-                int totalParamCount = matchedParamCount + otherParamCount;
-                if (method.getParameterCount() == totalParamCount && matchedParamCount == parameters.size() + optionalParamCount) {
-                    return new MethodResult(method, paramNames.toArray(new String[0]), hasBodyParam);
-                }
             }
-        }
-        return null;
-    }
-
-    private static Object[] methodParameterValues(RoutingContext ctx, Method method,
-                                                  String[] parameterNames,
-                                                  Class<?>[] parameterTypes,
-                                                  MultiMap requestParameters,
-                                                  Object body) {
-        List<Object> result = new ArrayList<>();
-
-        Parameter[] parameters = method.getParameters();
-
-        for (int i = 0; i < parameterNames.length; i++) {
-            Parameter parameter = parameters[i];
-
-            if (parameter.getAnnotation(BodyParam.class) != null) {
-                result.add(convertBody(parameterTypes[i], body));
-            } else if (parameter.getAnnotation(UploadsParam.class) != null) {
-                result.add(ctx.fileUploads());
-            } else if (parameter.getAnnotation(PathParam.class) != null) {
-                result.add(ctx.normalizedPath());
-            } else {
-                OptionalParam optionalParam = parameter.getAnnotation(OptionalParam.class);
-                if (optionalParam != null) {
-                    result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters, optionalParam.defaultValue()));
-                } else {
-                    result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters, null));
-                }
-            }
-        }
-
-        return result.toArray(new Object[0]);
-    }
-
-    private static Object convertBody(Class<?> parameterType, Object body) {
-        if (body == null) {
             return null;
         }
 
-        if (parameterType == String.class) {
-            return body.toString();
-        } else if (parameterType == JsonObject.class) {
-            return body instanceof JsonObject jsonObject ? jsonObject : new JsonObject(body.toString());
-        } else if (parameterType == JsonArray.class) {
-            return body instanceof JsonArray jsonArray ? jsonArray : new JsonArray(body.toString());
-        } else if (parameterType == Integer.class || parameterType == int.class) {
-            return Integer.parseInt(body.toString());
-        } else if (parameterType == Long.class || parameterType == long.class) {
-            return Long.parseLong(body.toString());
-        } else if (parameterType == Double.class || parameterType == double.class) {
-            return Double.parseDouble(body.toString());
-        } else if (parameterType == Boolean.class || parameterType == boolean.class) {
-            return Boolean.parseBoolean(body.toString());
-        } else if (parameterType == Buffer.class) {
-            return body instanceof Buffer buffer ? buffer : Buffer.buffer(body.toString());
-        } else if (!parameterType.isPrimitive() && !parameterType.isArray()) {
-            try {
-                return new JsonMapper().readValue(body.toString(), parameterType);
-            } catch (Exception e) {
-                throw new IllegalArgumentException("Failed to convert body to " + parameterType.getName(), e);
+        private Object[] methodParameterValues(RoutingContext ctx,
+                                               Method method,
+                                               String[] parameterNames,
+                                               Class<?>[] parameterTypes,
+                                               MultiMap requestParameters,
+                                               Object body) {
+            List<Object> result = new ArrayList<>();
+
+            Parameter[] parameters = method.getParameters();
+
+            for (int i = 0; i < parameterNames.length; i++) {
+                Parameter parameter = parameters[i];
+
+                if (parameter.getAnnotation(BodyParam.class) != null) {
+                    result.add(convertBody(ctx.request().getHeader(CONTENT_TYPE), parameterTypes[i], body));
+                } else if (parameter.getAnnotation(UploadsParam.class) != null) {
+                    result.add(ctx.fileUploads());
+                } else if (parameter.getAnnotation(PathParam.class) != null) {
+                    result.add(ctx.normalizedPath());
+                } else {
+                    OptionalParam optionalParam = parameter.getAnnotation(OptionalParam.class);
+                    if (optionalParam != null) {
+                        result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters, optionalParam.defaultValue()));
+                    } else {
+                        result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters, null));
+                    }
+                }
             }
+
+            return result.toArray(new Object[0]);
         }
 
-        throw new IllegalArgumentException("Unsupported body type: " + parameterType);
-    }
+        private Object convertBody(String contentType, Class<?> parameterType, Object body) {
+            if (body == null) {
+                return null;
+            }
+            Object convertedBody = convertUsingAnnotatedConverter(contentType, parameterType, body);
+            if (convertedBody != null)
+                return convertedBody;
 
-    private static Object convertValue(String parameterName, Class<?> parameterType, MultiMap parameters, String defaultValue) {
-        String value = parameters.get(parameterName);
-        return convertValue(parameterType, value != null ? value : defaultValue);
-    }
+            return convertValue(parameterType, body);
+        }
 
-    private static Object convertValue(Class<?> parameterType, String value) {
-        if (parameterType == Integer.class || parameterType == int.class)
-            return value != null ? Integer.parseInt(value) : 0;
-        if (parameterType == Short.class || parameterType == short.class)
-            return value != null ? Short.valueOf(value) : 0;
-        if (parameterType == Byte.class || parameterType == byte.class)
-            return value != null ? Byte.valueOf(value) : 0;
-        if (parameterType == Boolean.class || parameterType == boolean.class)
-            return Boolean.valueOf(value);
-        else if (parameterType == Double.class || parameterType == double.class)
-            return value != null ? Double.parseDouble(value) : 0;
-        else if (parameterType == Float.class || parameterType == float.class)
-            return value != null ? Float.parseFloat(value) : 0;
-        else
-            return value;
-    }
+        private Object convertValue(Class<?> type, Object value) {
+            if (type == String.class) {
+                return value.toString();
+            } else if (type == JsonObject.class) {
+                return value instanceof JsonObject jsonObject ? jsonObject : new JsonObject(value.toString());
+            } else if (type == JsonArray.class) {
+                return value instanceof JsonArray jsonArray ? jsonArray : new JsonArray(value.toString());
+            } else if (type == Integer.class || type == int.class) {
+                return Integer.parseInt(value.toString());
+            } else if (type == Long.class || type == long.class) {
+                return Long.parseLong(value.toString());
+            } else if (type == Double.class || type == double.class) {
+                return Double.parseDouble(value.toString());
+            } else if (type == Boolean.class || type == boolean.class) {
+                return Boolean.parseBoolean(value.toString());
+            } else if (type == Buffer.class) {
+                return value instanceof Buffer buffer ? buffer : Buffer.buffer(value.toString());
+            } else if (!type.isPrimitive() && !type.isArray()) {
+                try {
+                    return new JsonMapper().readValue(value.toString(), type);
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("Failed to convert value to " + type.getName(), e);
+                }
+            }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private static void processHandlerResult(Method method, RoutingContext ctx, Object result) {
-        if (method.getReturnType() == void.class) {
-            ctx.end();
-        } else {
-            Result handlerResult;
-            if (result instanceof Result<?>) {
-                handlerResult = (Result<?>) result;
-                handlerResult.setResultClass(method.getReturnType());
-                handlerResult.setAnnotations(method.getAnnotations());
-                applyHttpHeaders(method, handlerResult);
-                handlerResult.handle(ctx);
+            throw new IllegalArgumentException("Unsupported value type: " + type);
+        }
+
+        private Object convertUsingAnnotatedConverter(String contentType, Class<?> type, Object value) {
+            if (value != null && contentType != null) {
+                Method method = convertersCache.getConverter(contentType, type);
+                if (method != null) {
+                    try {
+                        return method.invoke(target, convertValue(method.getParameterTypes()[0], value));
+                    } catch (Exception e) {
+                        logger.error("Error converting value using @ConvertFrom method: " + method.getName(), e);
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
+            return null;
+        }
+
+        private Object convertValue(String parameterName, Class<?> parameterType, MultiMap parameters, String defaultValue) {
+            String value = parameters.get(parameterName);
+            return convertValue(parameterType, value != null ? value : defaultValue);
+        }
+
+        private Object convertValue(Class<?> parameterType, String value) {
+            if (parameterType == Integer.class || parameterType == int.class)
+                return value != null ? Integer.parseInt(value) : 0;
+            if (parameterType == Short.class || parameterType == short.class)
+                return value != null ? Short.valueOf(value) : 0;
+            if (parameterType == Byte.class || parameterType == byte.class)
+                return value != null ? Byte.valueOf(value) : 0;
+            if (parameterType == Boolean.class || parameterType == boolean.class)
+                return Boolean.valueOf(value);
+            else if (parameterType == Double.class || parameterType == double.class)
+                return value != null ? Double.parseDouble(value) : 0;
+            else if (parameterType == Float.class || parameterType == float.class)
+                return value != null ? Float.parseFloat(value) : 0;
+            else
+                return value;
+        }
+
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        private void processHandlerResult(Method method, RoutingContext ctx, Object result) {
+            if (method.getReturnType() == void.class) {
+                ctx.end();
             } else {
-                handlerResult = new Result(result);
+                Result handlerResult = result instanceof Result<?> ? (Result<?>) result : new Result(result);
                 handlerResult.setResultClass(method.getReturnType());
                 handlerResult.setAnnotations(method.getAnnotations());
                 applyHttpHeaders(method, handlerResult);
+
+                Object convertedResult = convertTo(target, handlerResult.getResult(), (String) handlerResult.getHeaders().get(CONTENT_TYPE));
+                if (handlerResult.getResult() != convertedResult) {
+                    handlerResult.setResult(convertedResult);
+                    handlerResult.setResultClass(convertedResult.getClass());
+                }
+
                 handlerResult.handle(ctx);
             }
         }
+
+        private Object convertTo(Object target, Object result, String contentType) {
+            Object convertedResult = result;
+
+            if (result != null && contentType != null) {
+                Method method = convertersCache.getConverter(result.getClass(), contentType);
+                if (method != null) {
+                    try {
+                        convertedResult = method.invoke(target, result);
+                    } catch (Exception e) {
+                        logger.error("Error converting result using @ConvertsTo method: " + method.getName(), e);
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
+
+            return convertedResult;
+        }
+
+        private static void applyHttpHeaders(Method method, Result<?> handlerResult) {
+            HttpHeaders.Headers headers = method.getAnnotation(HttpHeaders.Headers.class);
+            if (headers != null) {
+                for (HttpHeaders.Header header : headers.value()) {
+                    String[] headerParts = header.value().split(":");
+                    if (headerParts.length == 2)
+                        handlerResult.putHeader(headerParts[0].trim(), headerParts[1].trim());
+                    else
+                        logger.warn("Invalid header definition: " + header.value());
+                }
+            }
+
+            ContentType contentType = method.getAnnotation(ContentType.class);
+            if (contentType != null)
+                handlerResult.putHeader(CONTENT_TYPE, contentType.value());
+        }
     }
 
-    private static void applyHttpHeaders(Method method, Result handlerResult) {
-        HttpHeaders.Headers annotation = method.getAnnotation(HttpHeaders.Headers.class);
-        if (annotation != null) {
-            for (HttpHeaders.Header header : annotation.value()) {
-                String[] headerParts = header.value().split(":");
-                if (headerParts.length == 2)
-                    handlerResult.putHeader(headerParts[0].trim(), headerParts[1].trim());
-                else
-                    logger.warn("Invalid header definition: " + header.value());
-            }
+    private static class ConvertersCache {
+        public ConvertersCache(Object target) {
+            this.cache = cacheConverters(target);
         }
+
+        private final Map<String, Method> cache;
+
+        private Map<String, Method> cacheConverters(Object target) {
+            Map<String, Method> result = new HashMap<>();
+
+            for (Method method : target.getClass().getDeclaredMethods()) {
+                ConvertsTo convertsTo = method.getAnnotation(ConvertsTo.class);
+                if (convertsTo != null &&
+                        method.getParameterCount() == 1 &&
+                        method.getParameterTypes()[0].isAssignableFrom(convertsTo.from())) {
+                    result.put(keyFor(convertsTo), method);
+                }
+
+                ConvertsFrom convertsFrom = method.getAnnotation(ConvertsFrom.class);
+                if (convertsFrom != null &&
+                        method.getParameterCount() == 1 &&
+                        method.getReturnType().isAssignableFrom(convertsFrom.to())) {
+                    result.put(keyFor(convertsFrom), method);
+                }
+            }
+
+            return Collections.unmodifiableMap(result);
+        }
+
+        private String keyFor(ConvertsTo converter) {
+            return converter.from() + ":" + converter.contentType();
+        }
+
+        private String keyFor(ConvertsFrom converter) {
+            return converter.contentType() + ":" + converter.to();
+        }
+
+        public Method getConverter(Class<?> from , String to) {
+            return cache.get(keyFor(new ConvertsTo() {
+                @Override
+                public Class<? extends Annotation> annotationType() {
+                    return ConvertsTo.class;
+                }
+
+                @Override
+                public Class<?> from() {
+                    return from;
+                }
+
+                @Override
+                public String contentType() {
+                    return to;
+                }
+            }));
+        }
+
+        public Method getConverter(String from , Class<?> to) {
+            return cache.get(keyFor(new ConvertsFrom() {
+                @Override
+                public Class<? extends Annotation> annotationType() {
+                    return ConvertsFrom.class;
+                }
+
+                @Override
+                public String contentType() {
+                    return from;
+                }
+
+                @Override
+                public Class<?> to() {
+                    return to;
+                }
+            }));
+        }
+
     }
 }
