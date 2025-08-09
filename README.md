@@ -441,7 +441,7 @@ format handling seamless and flexible.
 
 ### @ConvertsTo Annotation
 
-`@ConvertsTo` annotation that marks a method as a converter which transforms the input value into a result according to
+`@ConvertsTo` annotation used to mark methods that converts the input value into a result according to
 a specified content type. Such converters will be used to convert result values. Input type is explicitly defined by the
 converter method's single parameter.
 The contract for conversion methods:
@@ -461,7 +461,7 @@ public String convertUserToText(User user) {
 
 ### @ConvertsFrom Annotation
 
-@ConvertsFrom annotation used to mark methods that convert input data from specific content types into target objects.
+`@ConvertsFrom` annotation used to mark methods that convert input data from specific content types into target objects.
 Such converters will be used to convert body values to appropriate objects. Output type is explicitly defined by the
 converter method's return type.
 
