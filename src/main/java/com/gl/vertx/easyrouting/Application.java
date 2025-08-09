@@ -75,6 +75,7 @@ public class Application {
     private String host = "localhost";
     private JksOptions jksOptions;
     private PemKeyCertOptions pemKeyCertOptions;
+    private Thread shutdownHook;
 
     class ApplicationVerticle extends AbstractVerticle {
         @Override
@@ -237,14 +238,30 @@ public class Application {
      * shutdown of the application by calling the stop() method.
      */
     public Application handleShutdown() {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+        if (shutdownHook != null) {
+            logger.warn("Shutdown hook is already registered");
+            return this;
+        }
+
+        shutdownHook = new Thread(() -> {
             if (isRunning()) {
                 System.out.println("Shutting down...");
                 stop();
             }
-        }));
-
+        });
+        Runtime.getRuntime().addShutdownHook(shutdownHook);
         return this;
+    }
+
+    private void removeShutdownHook() {
+        if (shutdownHook != null) {
+            try {
+                Runtime.getRuntime().removeShutdownHook(shutdownHook);
+            } catch (IllegalStateException e) {
+                // ignore - JVM is already shutting down
+            }
+            shutdownHook = null;
+        }
     }
 
     /**
@@ -420,6 +437,7 @@ public class Application {
                             });
                         }
                     } else {
+                        removeShutdownHook();
                         String error = "Server failed to start on port: " + portToUse + " - " + result.cause().getMessage();
                         logger.error(error);
                         startPromise.fail(result.cause());

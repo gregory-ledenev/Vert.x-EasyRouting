@@ -76,9 +76,9 @@ public class TestApplication {
             return str1 + str2 + (str3 != null && str3.isEmpty() ? "" : str3);
         }
 
-        @Header("content-type: text/plain")
-        @Header("header1: Value1")
-        @Header("header2: Value2")
+        @HttpHeader("content-type: text/plain")
+        @HttpHeader("header1: Value1")
+        @HttpHeader("header2: Value2")
         @GET("/multipleHeaders")
         String getMultipleHeaders() {
             return "Multiple Headers";

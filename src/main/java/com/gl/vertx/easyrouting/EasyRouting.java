@@ -502,6 +502,9 @@ public class EasyRouting {
         }
 
         static Object convertValue(Object value, Class<?> to) {
+            if (to.isAssignableFrom(value.getClass()))
+                return value; // No conversion needed
+
             if (to == String.class) {
                 return value.toString();
             } else if (to == JsonObject.class) {
@@ -588,9 +591,9 @@ public class EasyRouting {
         }
 
         private static void applyHttpHeaders(Method method, Result<?> handlerResult) {
-            HttpHeaders.Headers headers = method.getAnnotation(HttpHeaders.Headers.class);
+            HttpHeaders headers = method.getAnnotation(HttpHeaders.class);
             if (headers != null) {
-                for (HttpHeaders.Header header : headers.value()) {
+                for (HttpHeader header : headers.value()) {
                     String[] headerParts = header.value().split(":");
                     if (headerParts.length == 2)
                         handlerResult.putHeader(headerParts[0].trim(), headerParts[1].trim());
