@@ -63,13 +63,13 @@ simplifies the development process while still providing powerful features.
 - Binding methods to HTTP error codes
 - Ready-to use application class for prototyping and testing
 
-## Using EasyRouting Application
+## EasyRouting Application
 
 There is a special Application class that allows building minimal applications
 for prototyping and testing purposes without learning how to create a full
 Vert.x application.
 
-``` java
+```java
 class TestApplication extends Application {
     @GET("/*")
     String hello() {
@@ -82,13 +82,14 @@ class TestApplication extends Application {
 }
 ```
 
+### Using Application for Tests 
 You may use that application to simplify making your tests:
 
 - add your test code to `onStartCompletion` handler
 - call `handleCompletionHandlerFailure()` to propagate collected failures, like
   assertion errors, and to make your tests functional
 
-``` java
+```java
 class TestApplication extends Application {
     @GET("/*")
     String hello() {
@@ -106,6 +107,7 @@ class TestApplication extends Application {
     }
 }
 ```
+### JWT and SSL Support
 
 To run an Application with JWT authentication and SSL:
 
@@ -118,12 +120,30 @@ To run an Application with JWT authentication and SSL:
 
 ```java
 new UserAdminApplication().
+    jwtAuth(<JWT SECRET>, "/api/*").
+    sslWithJks("keystore",<KEYSTORE PASSWORD>).
+    start(443);
+```
+### Application Modules
 
-jwtAuth(<JWT SECRET>, "/api/*").
-
-sslWithJks("keystore",<KEYSTORE PASSWORD>).
-
-start(443);
+If your application is small, you can supply all the handler methods inside the Application itself. Otherwise, you can use
+Application Modules to organize and modularize application functionality by grouping related endpoint handlers together.
+You can create an Application Module by extending the `ApplicationModule` class, add all required and properly annotated
+handler methods, and then register the module with the Application using the `Application.module(...)` method.
+```java
+static class UserApplicationModule extends ApplicationModule<UserAdminApplication> {
+    @GET("/api/users")
+    List<User> getUsers() {
+        return application.userService.getUsers();
+    }
+}
+...
+public static void main(String[] args) {
+    new UserAdminApplication(new LoginService(), new UserService()).
+            module(new UserApplicationModule()).
+            jwtAuth(JWT_SECRET, "/api/*").
+            start();
+}
 ```
 
 ## Using With Vert.x Router
@@ -134,7 +154,7 @@ Router.
 
 ### 1. Create a Controller Class
 
-``` java
+```java
 public class Controller {
     @GET("/*")
     String hello() {
@@ -145,7 +165,7 @@ public class Controller {
 
 ### 2. Register the Controller with Vert.x Router
 
-``` java
+```java
 public class Application {
     public static void main(String[] args) {
         Vertx vertx = Vertx.vertx();
@@ -192,7 +212,6 @@ authentication. If nor roles are specified, the method will be accessible to all
 authenticated users.
 
 ```java
-
 @DELETE(value = "/api/users/:id", requiredRoles = {"admin"})
 boolean deleteUser(@Param("id") String id) {
     return userService.deleteUser(id);
@@ -209,7 +228,6 @@ operations that may take a long time and to safely add any blocking code to
 such methods.
 
 ```java
-
 @Blocking
 @GET(value = "/blockingHello")
 String blockingHello() {
@@ -226,7 +244,6 @@ String blockingHello() {
 Use `@Form` annotation to mark methods that should handle form data:
 
 ```java
-
 @Form
 @POST("/loginForm")
 String loginForm(@Param("user") String user, @Param("password") String password) {
@@ -239,7 +256,6 @@ String loginForm(@Param("user") String user, @Param("password") String password)
 Use `@ContentType` annotation to set the response content type:
 
 ```java
-
 @GET("/text")
 @ContentType("text/plain")
 String getText() {
@@ -253,7 +269,6 @@ Use `@HandleStatusCode` annotation to specify that a method handles specific err
 with codes:
 
 ```java
-
 @HandleStatusCode(401)
 @GET("/unauthenticated")
 Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
@@ -266,7 +281,6 @@ Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
 Use `@FileFromFolder` annotation to serve static files from the file system:
 
 ```java
-
 @GET("/*")
 @FileFromFolder("document")
 String get(@PathParam("path") String path) {
@@ -279,7 +293,6 @@ String get(@PathParam("path") String path) {
 Use `@FileFromResource` annotation to serve static files from the classpath:
 
 ```java
-
 @GET("/*")
 @FileFromResource(UserAdminApplication.class)
 String get(@PathParam("path") String path) {
@@ -293,7 +306,6 @@ Use `@NotNullResult` annotation to return some response with text and code if
 the annotated method returns null:
 
 ```java
-
 @GET("/api/users/:id")
 @NotNullResult(value = "No user found", statusCode = 404)
 User getUser(@Param("id") String id) {
@@ -307,7 +319,6 @@ Use `@HttpHeaders.Header` annotation to set HTTP headers in the response. You ca
 headers:
 
 ```java
-
 @Header("content-type: text/plain")
 @Header("header1: value1")
 @Header("header2: value2")
@@ -340,7 +351,6 @@ Use `@Param` annotation to bind request parameters or form arguments to method
 parameters:
 
 ```java
-
 @HttpMethods.GET("/users/search")
 public List<User> searchUsers(@Param("name") String name, @Param("age") Integer age) {
     // Access query parameters like /users/search?name=John&age=30
@@ -353,7 +363,6 @@ Use the `@OptionalParam` annotation to bind optional request parameters or form
 arguments to method parameters:
 
 ```java
-
 @HttpMethods.GET("/users/search")
 public List<User> searchUsers(@Param("name") String name, @OptionalParam("age") Integer age) {
     // Access query parameters like /users/search?name=John&age=30
@@ -365,7 +374,6 @@ public List<User> searchUsers(@Param("name") String name, @OptionalParam("age") 
 Use the `@BodyParam` annotation to bind HTTP body content to a method parameter:
 
 ```java
-
 @HttpMethods.POST("/users")
 public User createUser(@BodyParam("user") User user) {
     // Automatically converts JSON to User object
@@ -378,7 +386,6 @@ Use the `@UploadsParam` annotation to bind a list of uploaded files to a method
 parameter. Note: the method parameter must be a `List<FileUpload>`.
 
 ```java
-
 @POST("/files/uploadFile")
 public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @UploadsParam List<FileUpload> fileUploads) {
     return Result.saveFiles("files", fileUploads, "redirect:/");
@@ -401,7 +408,6 @@ If you need custom processing, possibly involving direct access to context - you
 handler and return it.
 
 ```java
-
 @GET("/testCustomHandler")
 Result<String> testCustomHandler() {
     return new Result<>("Hello").handler((result, ctx) -> result.setResult(result.getResult() + " World!"));
@@ -423,7 +429,6 @@ specifying them as `requiredRoles` in the
 `@GET`, `@POST` etc. annotations:
 
 ```java
-
 @HttpMethods.GET("/users/:id", requiredRoles = {"admin"})
 public User getUser(@Param("id") int userId) {
     // ...
@@ -487,7 +492,6 @@ EasyRouting supports error handling by binding HTTP error codes to handler
 methods using `@HandlesStatusCode` annotations:
 
 ```java
-
 @HandlesStatusCode(401)
 @GET("/loginForm")
 public String loginForm(@OptionalParam("redirect") String redirect) {

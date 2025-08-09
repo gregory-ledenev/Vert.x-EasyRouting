@@ -30,10 +30,45 @@ import static com.gl.vertx.easyrouting.HttpMethods.*;
 @SuppressWarnings("unused")
 
 public class UserAdminApplication extends Application {
+    static class UserApplicationModule extends ApplicationModule<UserAdminApplication> {
+        @GET("/api/users")
+        List<User> getUsers() {
+            return application.userService.getUsers();
+        }
+
+        @GET("/api/users/:id") @NotNullResult(value = "No user found", statusCode = 404)
+        User getUser(@Param("id") String id) {
+            return application.userService.getUser(id);
+        }
+
+        @POST(value = "/api/users", requiredRoles = {"admin"})
+        User addUser(@BodyParam("user") User user) {
+            return application.userService.addUser(user);
+        }
+
+        @PUT(value = "/api/users/:id", requiredRoles = {"admin"})
+        User updateUser(@Param("id") String id, @BodyParam("user") User user) {
+            return application.userService.updateUser(user, id);
+        }
+
+        @DELETE(value = "/api/users/:id", requiredRoles = {"admin"})
+        boolean deleteUser(@Param("id") String id) {
+            return application.userService.deleteUser(id);
+        }
+
+        public UserApplicationModule(String... protectedRoutes) {
+            super(protectedRoutes);
+        }
+    }
+
+    private final LoginService loginService;
+    private final UserService userService;
+    static final String JWT_SECRET = "very looooooooooooooooooooooooooooooooooooong secret";
 
     public static void main(String[] args) {
         new UserAdminApplication(new LoginService(), new UserService()).
-                jwtAuth(JWT_SECRET, "/api/*").
+                module(new UserApplicationModule("/api/*")).
+                jwtAuth(JWT_SECRET).
                 sslWithJks("keystore", "1234567890").
                 handleShutdown().
                 start();
@@ -54,50 +89,11 @@ public class UserAdminApplication extends Application {
         return path;
     }
 
-    @GET("/text") @ContentType("text/plain")
-    String getText() {
-        return "Hello <b>World!</b>";
-    }
-
-    @GET("/html")
-    String getHtml() {
-        return "Hello <b>World!</b>";
-    }
-
-    @GET("/api/users")
-    List<User> getUsers() {
-        return userService.getUsers();
-    }
-
-    @GET("/api/users/:id") @NotNullResult(value = "No user found", statusCode = 404)
-    User getUser(@Param("id") String id) {
-        return userService.getUser(id);
-    }
-
-    @POST(value = "/api/users", requiredRoles = {"admin"})
-    User addUser(@BodyParam("user") User user) {
-        return userService.addUser(user);
-    }
-
-    @PUT(value = "/api/users/:id", requiredRoles = {"admin"})
-    User updateUser(@Param("id") String id, @BodyParam("user") User user) {
-        return userService.updateUser(user, id);
-    }
-
-    @DELETE(value = "/api/users/:id", requiredRoles = {"admin"})
-    boolean deleteUser(@Param("id") String id) {
-        return userService.deleteUser(id);
-    }
-
     @HandlesStatusCode(401)
     @GET("/unauthenticated")
     Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
         return new Result<>("You are not unauthenticated to access this: " + redirect, 401);
     }
-
-    private final LoginService loginService;
-    private final UserService userService;
-    static final String JWT_SECRET = "very looooooooooooooooooooooooooooooooooooong secret";
 }
 
 record LoginData(String username, String password) {}

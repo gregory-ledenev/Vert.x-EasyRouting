@@ -35,6 +35,7 @@ import io.vertx.ext.web.handler.BodyHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Scanner;
@@ -65,7 +66,7 @@ public class Application {
     private boolean readInput;
     private Consumer<Application> completionHandler;
     private String jwtSecret;
-    private String[] jwtRoutes;
+    private String[] protectedRoutes;
     private BiConsumer<Application, Throwable> failureHandler;
 
     private Throwable completionHandlerFailure;
@@ -76,6 +77,7 @@ public class Application {
     private JksOptions jksOptions;
     private PemKeyCertOptions pemKeyCertOptions;
     private Thread shutdownHook;
+    private final List<ApplicationModule<?>> applicationModules = new ArrayList<>();
 
     class ApplicationVerticle extends AbstractVerticle {
         @Override
@@ -84,13 +86,26 @@ public class Application {
 
             router.route().handler(BodyHandler.create());
 
-            if (jwtSecret != null && jwtRoutes != null)
-                for (String jwtRoute : jwtRoutes)
-                    EasyRouting.applyJWTAuth(vertx, router, jwtRoute, jwtSecret);
+            if (jwtSecret != null) {
+                for (ApplicationModule<?> applicationModule : applicationModules) {
+                    for (String protectedRoute : applicationModule.getProtectedRoutes())
+                        EasyRouting.applyJWTAuth(vertx, router, protectedRoute, jwtSecret);
+                }
+
+                if (protectedRoutes != null) {
+                    for (String protectedRoute : protectedRoutes)
+                        EasyRouting.applyJWTAuth(vertx, router, protectedRoute, jwtSecret);
+                }
+            }
+
+            for (ApplicationModule<?> applicationModule : applicationModules)
+                EasyRouting.setupController(router, applicationModule);
 
             EasyRouting.setupController(router, Application.this);
 
             createHttpServer(startPromise, router, port);
+
+            started();
         }
     }
 
@@ -105,12 +120,12 @@ public class Application {
      * where JWT authentication should be applied.
      *
      * @param jwtSecret the secret key used to sign and verify JWT tokens
-     * @param jwtRoutes routes or endpoints requiring JWT authentication
+     * @param protectedRoutes routes or endpoints requiring JWT authentication
      * @return the current {@code Application} instance, allowing for method chaining
      */
-    public <T extends Application> T jwtAuth(String jwtSecret, String... jwtRoutes) {
+    public <T extends Application> T jwtAuth(String jwtSecret, String... protectedRoutes) {
         this.jwtSecret = jwtSecret;
-        this.jwtRoutes = jwtRoutes;
+        this.protectedRoutes = protectedRoutes;
 
         return self();
     }
@@ -253,6 +268,22 @@ public class Application {
         return this;
     }
 
+    /**
+     * Registers an application module with this application.
+     * Application modules provide a way to modularize and extend the application's functionality.
+     * Modules must be registered before the application starts running.
+     *
+     * @param applicationModule the module to register with this application
+     * @return the current {@code Application} instance, allowing for method chaining
+     * @throws IllegalStateException if attempting to register a module after the application has started
+     */
+    public Application module(ApplicationModule<?> applicationModule) {
+        if (isRunning())
+            throw new IllegalStateException("Cannot register application module after application has started");
+        applicationModules.add(applicationModule);
+        return this;
+    }
+
     private void removeShutdownHook() {
         if (shutdownHook != null) {
             try {
@@ -272,6 +303,7 @@ public class Application {
         if (vertx != null) {
             logger.info("Application stopping...");
             vertx.close().onComplete(result -> {
+                stopped();
                 stopWaiting();
                 synchronized (shutdownLock) {
                     shutdownLock.notify();
@@ -292,6 +324,16 @@ public class Application {
         } else {
             logger.warn("Application is not running, nothing to stop.");
         }
+    }
+
+    public void started() {
+        for (ApplicationModule applicationModule : applicationModules)
+            applicationModule.started(this);
+    }
+
+    public void stopped() {
+        for (ApplicationModule applicationModule : applicationModules)
+            applicationModule.stopped(this);
     }
 
     /**

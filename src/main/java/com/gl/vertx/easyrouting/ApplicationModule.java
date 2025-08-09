@@ -1,0 +1,87 @@
+/*
+ *
+ * Copyright 2025 Gregory Ledenev (gregory.ledenev37@gmail.com)
+ *
+ * MIT License
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of
+ * this software and associated documentation files (the “Software”), to deal in
+ * the Software without restriction, including without limitation the rights to
+ * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ * of the Software, and to permit persons to whom the Software is furnished to do
+ * so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * /
+ */
+
+package com.gl.vertx.easyrouting;
+
+/**
+ * Base class for application modules that can be registered with an {@link Application}.
+ * Modules provide a way to organize and modularize application functionality by grouping
+ * related endpoint handlers together.
+ *
+ * @param <T> the type of Application this module works with
+ * @see Application
+ */
+public abstract class ApplicationModule<T extends Application> {
+    protected T application;
+    private final String[] protectedRoutes;
+
+    /**
+     * Creates a new ApplicationModule with the specified protected routes.
+     * Protected routes require authentication before they can be accessed.
+     *
+     * @param protectedRoutes array of URL patterns for routes that require authentication
+     */
+    public ApplicationModule(String... protectedRoutes) {
+        this.protectedRoutes = protectedRoutes;
+    }
+
+    /**
+     * Creates a new ApplicationModule with no protected routes.
+     * All routes will be either publicly accessible or protected at the application level.
+     */
+    public ApplicationModule() {
+        this(new String[0]);
+    }
+
+    /**
+     * Gets the array of protected route patterns configured for this module.
+     *
+     * @return array of URL patterns for routes that require authentication
+     */
+    public String[] getProtectedRoutes() {
+        return protectedRoutes;
+    }
+
+    /**
+     * Called when the module is started and registered with an application.
+     * Sets up the module with a reference to the parent application instance.
+     *
+     * @param application the parent application instance this module is being registered with
+     */
+    public void started(T application) {
+        this.application = application;
+    }
+
+    /**
+     * Called when the module is being stopped and unregistered from the application.
+     * Cleans up the module's reference to the parent application.
+     *
+     * @param application the parent application instance this module is being unregistered from
+     */
+    public void stopped(T application) {
+        this.application = null;
+    }
+}
