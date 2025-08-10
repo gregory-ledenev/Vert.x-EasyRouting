@@ -451,7 +451,7 @@ format handling seamless and flexible.
 a specified content type. Such converters will be used to convert result values. Input type is explicitly defined by the
 converter method's single parameter.
 The contract for conversion methods:
-- Must be a public (and static if needed) method.
+- Must be a public static method.
 - Must accept exactly one parameter of any type that defines a type of the objects to convert from.
 - Must return a non-void type compatible with the specified content type.
 - Must not throw checked exceptions.
@@ -472,7 +472,7 @@ Such converters will be used to convert body values to appropriate objects. Outp
 converter method's return type.
 
 The contract for conversion methods:
-- Must be a public method.
+- Must be a public static method.
 - Must accept exactly one parameter: input content that corresponds to the content type defined by annotation.
 - Must be non-void, where the return type defines the object's type to convert to.
 - Must not throw checked exceptions.
@@ -481,7 +481,7 @@ For example, the following converter converts objects that correspond to the _"t
 of the `User` type:
 ```java
 @ConvertsFrom("text/user-string")
-public User convertUserFromText(String text) {
+public static User convertUserFromText(String text) {
     // Convert text to User object
     return User.of(text);
 }

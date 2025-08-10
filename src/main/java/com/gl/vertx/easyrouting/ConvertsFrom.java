@@ -35,7 +35,7 @@ import java.lang.annotation.Target;
  * is explicitly defined by the converter method's return type.
  * <p>The contract for conversion methods: </p>
  *  <ul>
- *    <li>Must be a public (and static if needed) method.</li>
+ *    <li>Must be a public static method.</li>
  *    <li>Must accept exactly one parameter: input content that corresponds to the content type defined by annotation.</li>
  *    <li>Must be non-void, where the return type defines the object's type to convert to.</li>
  *    <li>Must not throw checked exceptions.</li>
@@ -44,7 +44,7 @@ import java.lang.annotation.Target;
  * type to objects of the {@code User} type:</p>
  * <pre>{@code
  * @ConvertsFrom("text/user-string")
- * public User convertUserFromText(String text) {
+ * public static User convertUserFromText(String text) {
  *     // Convert text to User object
  *     return new User(text);
  * }

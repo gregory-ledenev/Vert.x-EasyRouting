@@ -42,6 +42,7 @@ import org.slf4j.LoggerFactory;
 import java.lang.annotation.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -657,6 +658,9 @@ public class EasyRouting {
             Map<String, Method> result = new HashMap<>();
 
             for (Method method : target.getClass().getDeclaredMethods()) {
+                if (!Modifier.isStatic(method.getModifiers()))
+                    continue;
+
                 ConvertsTo convertsTo = method.getAnnotation(ConvertsTo.class);
                 if (convertsTo != null && method.getParameterCount() == 1)
                     result.put(keyFor(convertsTo, method.getParameterTypes()[0]), method);

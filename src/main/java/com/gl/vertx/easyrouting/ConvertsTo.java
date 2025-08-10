@@ -35,7 +35,7 @@ import java.lang.annotation.Target;
  * is explicitly defined by the converter method's single parameter.
  * <p>The contract for conversion methods: </p>
  * <ul>
- *   <li>Must be a public method</li>
+ *   <li>Must be a public static method</li>
  *   <li>Must accept exactly one parameter of any type that defines a type of the objects to convert from</li>
  *   <li>Must return a non-void type compatible with the specified content type</li>
  *   <li>Must not throw checked exceptions</li>
@@ -45,7 +45,7 @@ import java.lang.annotation.Target;
  * <pre>{@code
  *
  * @ConvertsTo("text/user-string")
- * public String convertUserToText(User user) {
+ * public static String convertUserToText(User user) {
  *     return user.toString();
  * }
  * }</pre>
