@@ -9,11 +9,22 @@ import java.net.http.HttpResponse;
 import java.util.Arrays;
 import java.util.List;
 
-import static com.gl.vertx.easyrouting.HttpHeaders.*;
 import static com.gl.vertx.easyrouting.HttpMethods.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TestApplication {
+    static class TestConverters extends ApplicationModule<TestApplicationImpl> {
+        @ConvertsTo("text/user-string")
+        static String convertUserToString(User user) {
+            return user.toString();
+        }
+
+        @ConvertsFrom("text/user-string")
+        static User convertUserFromString(String content) {
+            return User.of(content);
+        }
+    }
+
     static class TestApplicationImpl extends Application {
 
         public static final String JWT_PASSWORD = "veeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeery long password";
@@ -102,25 +113,16 @@ public class TestApplication {
             return user;
         }
 
-        @ConvertsTo("text/user-string")
-        static String convertUserToString(User user) {
-            return user.toString();
-        }
-
-        @ConvertsFrom("text/user-string")
-        static User convertUserFromString(String content) {
-            return User.of(content);
-        }
-
         public TestApplicationImpl() {
             jwtAuth(JWT_PASSWORD, "/api/*");
         }
 
         public static void main(String[] args) {
-            TestApplicationImpl app = new TestApplicationImpl()
-                    .onStartCompletion(Application::waitForInput)
-                    .handleShutdown()
-                    .start(8080);
+            TestApplicationImpl app = new TestApplicationImpl().
+                    module(new TestConverters()).
+                    onStartCompletion(Application::waitForInput).
+                    handleShutdown().
+                    start(8080);
         }
     }
 
@@ -186,7 +188,8 @@ public class TestApplication {
 
     @Test
     void testConversionTo() throws Throwable {
-        Application app = new TestApplicationImpl().
+        TestApplicationImpl app = new TestApplicationImpl().
+                module(new TestConverters()).
                 onStartCompletion(application -> {
 
                     HttpClient client = HttpClient.newHttpClient();
@@ -213,7 +216,8 @@ public class TestApplication {
 
     @Test
     void testConversionFrom() throws Throwable {
-        Application app = new TestApplicationImpl().
+        TestApplicationImpl app = new TestApplicationImpl().
+                module(new TestConverters()).
                 onStartCompletion(application -> {
 
                     HttpClient client = HttpClient.newHttpClient();

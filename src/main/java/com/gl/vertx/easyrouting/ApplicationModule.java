@@ -26,6 +26,8 @@
 
 package com.gl.vertx.easyrouting;
 
+import java.util.Objects;
+
 /**
  * Base class for application modules that can be registered with an {@link Application}.
  * Modules provide a way to organize and modularize application functionality by grouping
@@ -34,12 +36,26 @@ package com.gl.vertx.easyrouting;
  * @param <T> the type of Application this module works with
  * @see Application
  */
-public abstract class ApplicationModule<T extends Application> {
+public abstract class ApplicationModule<T extends Application> implements EasyRouting.AnnotatedConvertersHolder {
     protected T application;
     private final String[] protectedRoutes;
 
+    @Override
+    public EasyRouting.AnnotatedConverters getAnnotatedConverters() {
+        return application.getAnnotatedConverters();
+    }
+
+    public T getApplication() {
+        return application;
+    }
+
+    void setApplication(Application application) {
+        //noinspection unchecked
+        this.application = (T) application;
+    }
+
     /**
-     * Creates a new ApplicationModule with the specified protected routes.
+     * Creates a new ApplicationModule with the specified application instance and protected routes.
      * Protected routes require authentication before they can be accessed.
      *
      * @param protectedRoutes array of URL patterns for routes that require authentication
@@ -49,8 +65,8 @@ public abstract class ApplicationModule<T extends Application> {
     }
 
     /**
-     * Creates a new ApplicationModule with no protected routes.
-     * All routes will be either publicly accessible or protected at the application level.
+     * Creates a new ApplicationModule with the specified application instance and protected routes.
+     * Protected routes require authentication before they can be accessed.
      */
     public ApplicationModule() {
         this(new String[0]);
@@ -68,20 +84,14 @@ public abstract class ApplicationModule<T extends Application> {
     /**
      * Called when the module is started and registered with an application.
      * Sets up the module with a reference to the parent application instance.
-     *
-     * @param application the parent application instance this module is being registered with
      */
-    public void started(T application) {
-        this.application = application;
+    public void started() {
     }
 
     /**
      * Called when the module is being stopped and unregistered from the application.
      * Cleans up the module's reference to the parent application.
-     *
-     * @param application the parent application instance this module is being unregistered from
      */
-    public void stopped(T application) {
-        this.application = null;
+    public void stopped() {
     }
 }

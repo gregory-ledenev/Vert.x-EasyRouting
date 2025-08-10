@@ -60,7 +60,7 @@ import java.util.function.Consumer;
  *     }
  * }</pre>
  */
-public class Application {
+public class Application implements EasyRouting.AnnotatedConvertersHolder {
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private int port;
     private boolean readInput;
@@ -78,6 +78,12 @@ public class Application {
     private PemKeyCertOptions pemKeyCertOptions;
     private Thread shutdownHook;
     private final List<ApplicationModule<?>> applicationModules = new ArrayList<>();
+    private final EasyRouting.AnnotatedConverters annotatedConverters = new EasyRouting.AnnotatedConverters();
+
+    @Override
+    public EasyRouting.AnnotatedConverters getAnnotatedConverters() {
+        return annotatedConverters;
+    }
 
     class ApplicationVerticle extends AbstractVerticle {
         @Override
@@ -277,10 +283,11 @@ public class Application {
      * @return the current {@code Application} instance, allowing for method chaining
      * @throws IllegalStateException if attempting to register a module after the application has started
      */
-    public Application module(ApplicationModule<?> applicationModule) {
+    public Application module(ApplicationModule<? extends Application> applicationModule) {
         Objects.requireNonNull(applicationModule);
         if (isRunning())
             throw new IllegalStateException("Cannot register application module after application has started");
+        applicationModule.setApplication(this);
         applicationModules.add(applicationModule);
         return this;
     }
@@ -329,12 +336,12 @@ public class Application {
 
     public void started() {
         for (ApplicationModule applicationModule : applicationModules)
-            applicationModule.started(this);
+            applicationModule.started();
     }
 
     public void stopped() {
         for (ApplicationModule applicationModule : applicationModules)
-            applicationModule.stopped(this);
+            applicationModule.stopped();
     }
 
     /**

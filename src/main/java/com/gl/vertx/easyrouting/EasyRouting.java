@@ -89,6 +89,15 @@ public class EasyRouting {
         setupController(router, PATCH.class, target);
 
         setupFailureHandler(router, target);
+
+        setupAnnotatedConverters(target);
+    }
+
+    private static void setupAnnotatedConverters(Object target) {
+        if (target instanceof AnnotatedConvertersHolder annotatedConvertersHolder) {
+            AnnotatedConverters annotatedConverters = annotatedConvertersHolder.getAnnotatedConverters();
+            annotatedConverters.collectConverters(target);
+        }
     }
 
     /**
@@ -300,12 +309,18 @@ public class EasyRouting {
     private static class RoutingContextHandler implements Handler<RoutingContext> {
         private final Annotation annotation;
         private final Object target;
-        private final AnnotatedConverters convertersCache;
+        private final AnnotatedConverters annotatedConverters;
 
         public RoutingContextHandler(Annotation annotation, Object target) {
             this.annotation = annotation;
             this.target = target;
-            this.convertersCache = new AnnotatedConverters(target);
+
+            if (target instanceof AnnotatedConvertersHolder annotatedConvertersHolder) {
+                this.annotatedConverters = annotatedConvertersHolder.getAnnotatedConverters();
+            } else {
+                this.annotatedConverters = new AnnotatedConverters();
+                this.annotatedConverters.collectConverters(target);
+            }
         }
 
         @Override
@@ -535,7 +550,7 @@ public class EasyRouting {
         private Object convertFrom(String contentType, Class<?> type, Object value) {
             Object result = value;
             if (value != null && contentType != null)
-                result = convertersCache.convert(result, contentType, type);
+                result = annotatedConverters.convert(result, contentType, type);
             return result;
         }
 
@@ -585,7 +600,7 @@ public class EasyRouting {
             Object convertedResult = result;
 
             if (result != null && contentType != null)
-                convertedResult = convertersCache.convert(result, result.getClass(), contentType);
+                convertedResult = annotatedConverters.convert(result, result.getClass(), contentType);
 
             return convertedResult;
         }
@@ -608,14 +623,37 @@ public class EasyRouting {
         }
     }
 
-    private static class AnnotatedConverters {
-        public AnnotatedConverters(Object target) {
-            this.cache = cacheConverters(target);
-        }
 
-        private final Map<String, Method> cache;
+    /**
+     * Interface for classes that hold and manage {@link AnnotatedConverters}.
+     * Implementing classes can provide access to their converter collection,
+     * allowing for centralized converter management and reuse.
+     */
+    public interface AnnotatedConvertersHolder {
+        /**
+         * Gets the AnnotatedConverters instance associated with this holder.
+         *
+         * @return the AnnotatedConverters instance
+         */
+        AnnotatedConverters getAnnotatedConverters();
+    }
 
-        private Map<String, Method> cacheConverters(Object target) {
+    /**
+     * Manages annotated converter methods for content type conversions.
+     * Provides caching and execution of converter methods marked with {@link ConvertsTo}
+     * and {@link ConvertsFrom} annotations. Thread-safe implementation using synchronized collections.
+     */
+    public static class AnnotatedConverters {
+        private final Map<String, Method> cache = Collections.synchronizedMap(new HashMap<>());
+
+        /**
+         * Collects and caches converter methods from the target object.
+         * Scans for methods annotated with {@link ConvertsTo} and {@link ConvertsFrom},
+         * storing them in the internal cache for later use.
+         *
+         * @param target the object to scan for converter methods
+         */
+        public void collectConverters(Object target) {
             Map<String, Method> result = new HashMap<>();
 
             for (Method method : target.getClass().getDeclaredMethods()) {
@@ -629,7 +667,7 @@ public class EasyRouting {
                 }
             }
 
-            return Collections.unmodifiableMap(result);
+            cache.putAll(result);
         }
 
         private String keyFor(ConvertsTo converter, Class<?> type) {
@@ -640,7 +678,14 @@ public class EasyRouting {
             return converter.value() + ":" + type;
         }
 
-        public Method getConverter(Class<?> from , String to) {
+        /**
+         * Gets a converter method that converts from the specified class to the given content type.
+         *
+         * @param from source class to convert from
+         * @param to   target content type to convert to
+         * @return converter method if found, null otherwise
+         */
+        public Method getConverter(Class<?> from, String to) {
             return cache.get(keyFor(new ConvertsTo() {
                 @Override
                 public Class<? extends Annotation> annotationType() {
@@ -654,7 +699,14 @@ public class EasyRouting {
             }, from));
         }
 
-        public Method getConverter(String from , Class<?> to) {
+        /**
+         * Gets a converter method that converts from the specified content type to the given class.
+         *
+         * @param from source content type to convert from
+         * @param to   target class to convert to
+         * @return converter method if found, null otherwise
+         */
+        public Method getConverter(String from, Class<?> to) {
             return cache.get(keyFor(new ConvertsFrom() {
                 @Override
                 public Class<? extends Annotation> annotationType() {
@@ -667,12 +719,21 @@ public class EasyRouting {
                 }
             }, to));
         }
-        
-        public Object convert(Object value, String from , Class<?> to) {
-            Method method = getConverter(from , to);
+
+        /**
+         * Converts a value from a content type to a specified class using cached converter methods.
+         *
+         * @param value the value to convert
+         * @param from  source content type
+         * @param to    target class
+         * @return converted value, or original value if no converter found
+         * @throws RuntimeException if conversion fails
+         */
+        public Object convert(Object value, String from, Class<?> to) {
+            Method method = getConverter(from, to);
             if (method != null) {
                 try {
-                    return method.invoke(this, RoutingContextHandler.convertValue(value, method.getParameterTypes()[0]));
+                    return method.invoke(null, RoutingContextHandler.convertValue(value, method.getParameterTypes()[0]));
                 } catch (Exception e) {
                     logger.error("Error converting value using @ConvertsTo method: " + method.getName(), e);
                     throw new RuntimeException(e);
@@ -682,11 +743,20 @@ public class EasyRouting {
             }
         }
 
+        /**
+         * Converts a value of a specific class to a specified content type using cached converter methods.
+         *
+         * @param value the value to convert
+         * @param from  source class
+         * @param to    target content type
+         * @return converted value, or original value if no converter found
+         * @throws RuntimeException if conversion fails
+         */
         public Object convert(Object value, Class<?> from, String to) {
             Method method = getConverter(from, to);
             if (method != null) {
                 try {
-                    return method.invoke(value, value);
+                    return method.invoke(null, value);
                 } catch (Exception e) {
                     logger.error("Error converting value using @ConvertsFrom method: " + method.getName(), e);
                     throw new RuntimeException(e);

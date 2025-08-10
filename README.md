@@ -129,7 +129,8 @@ new UserAdminApplication().
 If your application is small, you can supply all the handler methods inside the Application itself. Otherwise, you can use
 Application Modules to organize and modularize application functionality by grouping related endpoint handlers together.
 You can create an Application Module by extending the `ApplicationModule` class, add all required and properly annotated
-handler methods, and then register the module with the Application using the `Application.module(...)` method.
+handler methods, and then register the module with the Application using the `Application.module(...)` method. Also,
+you can define all the converters in a dedicated module to keep them in one place and to allow easy reuse.
 ```java
 static class UserApplicationModule extends ApplicationModule<UserAdminApplication> {
     @GET("/api/users")

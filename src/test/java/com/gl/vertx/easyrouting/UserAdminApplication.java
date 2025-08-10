@@ -66,7 +66,7 @@ public class UserAdminApplication extends Application {
     static final String JWT_SECRET = "very looooooooooooooooooooooooooooooooooooong secret";
 
     public static void main(String[] args) {
-        new UserAdminApplication(new LoginService(), new UserService()).
+        UserAdminApplication userAdminApplication = new UserAdminApplication(new LoginService(), new UserService()).
                 module(new UserApplicationModule("/api/*")).
                 jwtAuth(JWT_SECRET).
                 sslWithJks("keystore", "1234567890").
