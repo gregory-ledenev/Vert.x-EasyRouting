@@ -658,20 +658,33 @@ public class EasyRouting {
             Map<String, Method> result = new HashMap<>();
 
             for (Method method : target.getClass().getDeclaredMethods()) {
-                if (!Modifier.isStatic(method.getModifiers()))
-                    continue;
+                var convertsTo = method.getAnnotation(ConvertsTo.class);
+                var convertsFrom = method.getAnnotation(ConvertsFrom.class);
 
-                ConvertsTo convertsTo = method.getAnnotation(ConvertsTo.class);
-                if (convertsTo != null && method.getParameterCount() == 1)
-                    result.put(keyFor(convertsTo, method.getParameterTypes()[0]), method);
+                if (convertsTo != null || convertsFrom != null) {
+                    if (!checkMethodSignature(method))
+                        continue;
 
-                ConvertsFrom convertsFrom = method.getAnnotation(ConvertsFrom.class);
-                if (convertsFrom != null && ! method.getReturnType().equals(void.class)) {
-                    result.put(keyFor(convertsFrom, method.getReturnType()), method);
+                    if (convertsTo != null)
+                        result.put(keyFor(convertsTo, method.getParameterTypes()[0]), method);
+                    else
+                        result.put(keyFor(convertsFrom, method.getReturnType()), method);
                 }
             }
 
             cache.putAll(result);
+        }
+
+        private static boolean checkMethodSignature(Method method) {
+            boolean result = Modifier.isStatic(method.getModifiers()) &&
+                    Modifier.isPublic(method.getModifiers()) &&
+                    method.getReturnType() != Void.class &&
+                    method.getParameterCount() == 1;
+            if (!result) {
+                logger.warn("Method: " + method + " does not meet the requirements for a converter method. " +
+                        "It must be static, public, have a single parameter, and return a non-void type.");
+            }
+            return result;
         }
 
         private String keyFor(ConvertsTo converter, Class<?> type) {

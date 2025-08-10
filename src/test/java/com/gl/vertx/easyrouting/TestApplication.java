@@ -15,12 +15,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class TestApplication {
     static class TestConverters extends ApplicationModule<TestApplicationImpl> {
         @ConvertsTo("text/user-string")
-        static String convertUserToString(User user) {
+        public static String convertUserToString(User user) {
             return user.toString();
         }
 
         @ConvertsFrom("text/user-string")
-        static User convertUserFromString(String content) {
+        public static User convertUserFromString(String content) {
             return User.of(content);
         }
     }
