@@ -48,6 +48,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.gl.vertx.easyrouting.HttpMethods.*;
 import static com.gl.vertx.easyrouting.JWTUtil.ROLES;
@@ -643,9 +644,19 @@ public class EasyRouting {
      * Manages annotated converter methods for content type conversions.
      * Provides caching and execution of converter methods marked with {@link ConvertsTo}
      * and {@link ConvertsFrom} annotations. Thread-safe implementation using synchronized collections.
+     * <p>
+     * This class maintains a thread-safe cache of converter methods and provides functionality to:
+     * <ul>
+     *   <li>Collect and register converter methods from target objects</li>
+     *   <li>Convert values between different content types using registered converters</li>
+     *   <li>Manage converter method lookup and execution</li>
+     * </ul>
      */
     public static class AnnotatedConverters {
-        private final Map<String, Method> cache = Collections.synchronizedMap(new HashMap<>());
+        public static final String KEY_DELIMITER_TO = "->";
+        public static final String KEY_DELIMITER_FROM = "<-";
+
+        private final Map<String, Method> convertersCache = Collections.synchronizedMap(new HashMap<>());
 
         /**
          * Collects and caches converter methods from the target object.
@@ -672,7 +683,7 @@ public class EasyRouting {
                 }
             }
 
-            cache.putAll(result);
+            convertersCache.putAll(result);
         }
 
         private static boolean checkMethodSignature(Method method) {
@@ -688,11 +699,67 @@ public class EasyRouting {
         }
 
         private String keyFor(ConvertsTo converter, Class<?> type) {
-            return type + ":" + converter.value();
+            return MessageFormat.format("\"{0}\"{1}{2}", converter.value(), KEY_DELIMITER_TO, type.getName());
         }
 
         private String keyFor(ConvertsFrom converter, Class<?> type) {
-            return converter.value() + ":" + type;
+            return MessageFormat.format("\"{0}\"{1}{2}", converter.value(), KEY_DELIMITER_FROM, type.getName());
+        }
+
+        /**
+         * Returns a string representation of all registered converters.
+         * Each line contains a converter entry in the format "sourceType->targetType=methodSignature".
+         * Method signatures include return type, method name, and parameter types.
+         *
+         * @return a string containing all registered converters, sorted by converter key, one per line
+         */
+        @Override
+        public String toString() {
+            return toString(false);
+        }
+
+        /**
+         * Returns a string representation of all registered converters.
+         * Each line contains a converter entry in the format "sourceType->targetType=methodSignature".
+         * Method signatures include return type, method name, and parameter types.
+         *
+         * @param shortenClassNames if true, uses simple class names instead of fully qualified names
+         * @return a string containing all registered converters, sorted by converter key, one per line
+         */
+        public String toString(boolean shortenClassNames) {
+            return "{\n" +
+                    convertersCache.entrySet().stream()
+                            .sorted(Map.Entry.comparingByKey())
+                            .map(e -> "  " +
+                                    keyToString(e.getKey(), shortenClassNames) +
+                                    " = " +
+                                    methodToString(e.getValue(), shortenClassNames))
+                            .collect(java.util.stream.Collectors.joining("\n")) +
+                    "\n}";
+        }
+
+        private static String keyToString(String key, boolean shortenClassNames) {
+            if (!shortenClassNames) return key;
+
+            String keyDelimiter = KEY_DELIMITER_TO;
+
+            String[] parts = key.split(keyDelimiter, 2);
+            if (parts.length != 2) {
+                keyDelimiter =  KEY_DELIMITER_FROM;
+                parts = key.split(keyDelimiter, 2);
+            }
+
+            return MessageFormat.format("{0}{1}{2}", parts[0], keyDelimiter, parts[1].replaceAll("^.*[.$]", ""));
+        }
+
+        private static String methodToString(Method method, boolean shortenClassNames) {
+            return MessageFormat.format("{0} {1}.{2}({3})",
+                    shortenClassNames ? method.getReturnType().getSimpleName() : method.getReturnType().getName(),
+                    shortenClassNames ? method.getDeclaringClass().getSimpleName() : method.getDeclaringClass().getName(),
+                    method.getName(),
+                    Arrays.stream(method.getParameterTypes()).
+                            map(c -> shortenClassNames ? c.getSimpleName() : c.getName()).
+                            collect(Collectors.joining(",")));
         }
 
         /**
@@ -703,7 +770,7 @@ public class EasyRouting {
          * @return converter method if found, null otherwise
          */
         public Method getConverter(Class<?> from, String to) {
-            return cache.get(keyFor(new ConvertsTo() {
+            return convertersCache.get(keyFor(new ConvertsTo() {
                 @Override
                 public Class<? extends Annotation> annotationType() {
                     return ConvertsTo.class;
@@ -724,7 +791,7 @@ public class EasyRouting {
          * @return converter method if found, null otherwise
          */
         public Method getConverter(String from, Class<?> to) {
-            return cache.get(keyFor(new ConvertsFrom() {
+            return convertersCache.get(keyFor(new ConvertsFrom() {
                 @Override
                 public Class<? extends Annotation> annotationType() {
                     return ConvertsFrom.class;

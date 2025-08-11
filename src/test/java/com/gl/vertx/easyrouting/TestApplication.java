@@ -23,6 +23,16 @@ public class TestApplication {
         public static User convertUserFromString(String content) {
             return User.of(content);
         }
+
+        @ConvertsTo("text/xml")
+        public static String convertUserToXml(User user) {
+            return user.toString();
+        }
+
+        @ConvertsFrom("text/xml")
+        public static User convertUserFromXml(String content) {
+            return User.of(content);
+        }
     }
 
     static class TestApplicationImpl extends Application {
@@ -120,7 +130,10 @@ public class TestApplication {
         public static void main(String[] args) {
             TestApplicationImpl app = new TestApplicationImpl().
                     module(new TestConverters()).
-                    onStartCompletion(Application::waitForInput).
+                    onStartCompletion(application -> {
+                        System.out.println(application.getAnnotatedConverters().toString(false));
+                        application.waitForInput();
+                    }).
                     handleShutdown().
                     start(8080);
         }
@@ -151,6 +164,28 @@ public class TestApplication {
                         assertEquals("Hello from TestApplication!", response.body());
                     } catch (Throwable e) {
                         throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testAnnotatedConvertersDiscovery() throws Throwable {
+        Application app = new TestApplicationImpl().
+                module(new TestConverters()).
+                onStartCompletion(application -> {
+                    try {
+                        assertEquals("""
+                                {
+                                  "text/user-string"->com.gl.vertx.easyrouting.TestApplication$User = java.lang.String com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserToString(com.gl.vertx.easyrouting.TestApplication$User)
+                                  "text/user-string"<-com.gl.vertx.easyrouting.TestApplication$User = com.gl.vertx.easyrouting.TestApplication$User com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserFromString(java.lang.String)
+                                  "text/xml"->com.gl.vertx.easyrouting.TestApplication$User = java.lang.String com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserToXml(com.gl.vertx.easyrouting.TestApplication$User)
+                                  "text/xml"<-com.gl.vertx.easyrouting.TestApplication$User = com.gl.vertx.easyrouting.TestApplication$User com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserFromXml(java.lang.String)
+                                }""", application.getAnnotatedConverters().toString());
                     } finally {
                         application.stop();
                     }
