@@ -24,13 +24,13 @@ public class TestApplication {
     }
 
     @JsonRpc
-    static class JsonRpcTestApplicationModule extends JsonRpcApplicationModule<TestApplicationImpl> {
+    static class JsonRpcTestApplicationModule extends ApplicationModule<TestApplicationImpl> {
         @POST("/api/jsonrpc/test/*")
         public void handleJsonRpcRequest(RoutingContext ctx) {
             super.handleJsonRpcRequest(ctx);
         }
 
-        int multiply(@Param("a") int a , @Param("b") int b) {
+        public int multiply(@Param("a") int a , @Param("b") int b) {
             return a * b;
         }
 
@@ -59,7 +59,7 @@ public class TestApplication {
     }
 
     @JsonRpc
-    static class JsonRpcUserApplicationModule extends JsonRpcApplicationModule<TestApplicationImpl> {
+    static class JsonRpcUserApplicationModule extends ApplicationModule<TestApplicationImpl> {
         List<com.gl.vertx.easyrouting.User> getUsers() {
             return application.userService.getUsers();
         }

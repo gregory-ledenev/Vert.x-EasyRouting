@@ -26,6 +26,8 @@
 
 package com.gl.vertx.easyrouting;
 
+import io.vertx.ext.web.RoutingContext;
+
 import java.util.Objects;
 
 /**
@@ -52,6 +54,11 @@ public abstract class ApplicationModule<T extends Application> implements EasyRo
     void setApplication(Application application) {
         //noinspection unchecked
         this.application = (T) application;
+        if (application != null && getClass().getAnnotation(JsonRpc.class) != null)
+            routingContextHandler = new EasyRouting.RoutingContextHandler(null, this);
+        else
+            routingContextHandler = null;
+
     }
 
     /**
@@ -93,5 +100,18 @@ public abstract class ApplicationModule<T extends Application> implements EasyRo
      * Cleans up the module's reference to the parent application.
      */
     public void stopped() {
+    }
+
+    private EasyRouting.RoutingContextHandler routingContextHandler;
+
+    /**
+     * Handles JSON-RPC requests by delegating to the methods defined in the module. Subclasses can override this
+     * method to provide @POST annotation having the endpoint path
+     *
+     * @param ctx The RoutingContext containing the request and response
+     */
+    public void handleJsonRpcRequest(RoutingContext ctx) {
+        routingContextHandler.handle(ctx, (name, parameterClasses) ->
+                !(name.equals("handleJsonRpcRequest") && parameterClasses.length == 1 && parameterClasses[0] == RoutingContext.class));
     }
 }
