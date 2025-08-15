@@ -99,8 +99,13 @@ public class UserAdminApplication extends Application {
 record LoginData(String username, String password) {}
 
 record User(String id, String name, String email) {
+    private static int userIDCounter = 1;
     public User(String name, String email) {
-        this(UUID.randomUUID().toString(), name, email);
+        this(String.valueOf(userIDCounter++), name, email);
+    }
+
+    public static void clearUserIDCounter() {
+        userIDCounter = 1;
     }
 }
 

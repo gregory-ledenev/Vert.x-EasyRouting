@@ -48,11 +48,13 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.util.*;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 import static com.gl.vertx.easyrouting.HttpMethods.*;
 import static com.gl.vertx.easyrouting.JWTUtil.ROLES;
 import static com.gl.vertx.easyrouting.Result.CONTENT_TYPE;
+import static com.gl.vertx.easyrouting.Result.CT_APPLICATION_JSON;
 
 /**
  * EasyRouting provides annotation-based HTTP request handling for Vert.x web applications. It simplifies route
@@ -308,7 +310,19 @@ public class EasyRouting {
         return new RoutingContextHandler(annotation, target);
     }
 
-    private static class RoutingContextHandler implements Handler<RoutingContext> {
+    private static RpcContext rpcContext(RoutingContext ctx, Object target) {
+        RpcContext result = null;
+
+        if (target.getClass().getAnnotation(JsonRpc.class) != null) {
+            result = new JsonRpcContext(ctx.body().asJsonObject());
+        }
+
+        return result;
+    }
+
+    private static final String KEY_RPC_REQUEST = "rpcRequest";
+
+    protected static class RoutingContextHandler implements Handler<RoutingContext> {
         private final Annotation annotation;
         private final Object target;
         private final AnnotatedConverters annotatedConverters;
@@ -325,15 +339,31 @@ public class EasyRouting {
             }
         }
 
+        private void obtainRpcContext(RoutingContext ctx) {
+            RpcContext rpcContext = rpcContext(ctx, target);
+            if (rpcContext != null)
+                RpcContext.setRpcContext(ctx, rpcContext);
+        }
+
         @Override
         public void handle(RoutingContext ctx) {
+            handle(ctx, (aS, aClasses) -> true);
+        }
+
+        public void handle(RoutingContext ctx, BiFunction<String, Class<?>[], Boolean> methodFilter) {
+
             try {
-                MethodResult handlerMethod = getMethod(annotation,
-                        ctx.request().params(),
-                        ctx.request().method() == HttpMethod.POST ? ctx.request().formAttributes() : null);
+                obtainRpcContext(ctx);
+
+                MethodResult handlerMethod = getMethod(ctx, annotation, methodFilter);
                 if (handlerMethod == null) {
                     logger.error("No handler method for: \"" + annotation + "\" and parameters: " + ctx.request().params().names());
-                    ctx.response().setStatusCode(404).end();
+                    RpcContext rpcContext = RpcContext.getRpcContext(ctx);
+                    if (rpcContext != null) {
+                        ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_JSON).end(rpcContext.getNoMethodRpcResponse().encode().toString());
+                    } else {
+                        ctx.response().setStatusCode(404).end();
+                    }
                 } else if (checkRequiredRoles(ctx, handlerMethod.method)) {
                     if (handlerMethod.hasBodyParam) {
                         // Use the already parsed body instead of reading it again
@@ -365,29 +395,39 @@ public class EasyRouting {
         }
 
         private void invokeHandlerMethod(RoutingContext ctx, MethodResult handlerMethod, Object[] args) throws IllegalAccessException, InvocationTargetException {
-            if (handlerMethod.method().isAnnotationPresent(Blocking.class)) {
-                ctx.vertx().executeBlocking(promise -> {
-                    // Blocking operation
-                    Object result = null;
-                    try {
-                        result = handlerMethod.method().invoke(target, args);
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
-                    }
-                    promise.complete(result);
-                }, res -> {
-                    if (res.succeeded()) {
-                        processHandlerResult(handlerMethod.method(), ctx, res.result());
-                    } else {
-                        if (res.cause() instanceof RuntimeException)
-                            throw (RuntimeException) res.cause();
-                        else
-                            throw new RuntimeException(res.cause());
-                    }
-                });
-            } else {
-                Object result = handlerMethod.method().invoke(target, args);
-                processHandlerResult(handlerMethod.method(), ctx, result);
+            try {
+                if (handlerMethod.method().isAnnotationPresent(Blocking.class)) {
+                    ctx.vertx().executeBlocking(promise -> {
+                        // Blocking operation
+                        Object result = null;
+                        try {
+                            result = handlerMethod.method().invoke(target, args);
+                        } catch (Exception e) {
+                            throw new RuntimeException(e);
+                        }
+                        promise.complete(result);
+                    }, res -> {
+                        if (res.succeeded()) {
+                            processHandlerResult(handlerMethod.method(), ctx, res.result());
+                        } else {
+                            if (res.cause() instanceof RuntimeException)
+                                throw (RuntimeException) res.cause();
+                            else
+                                throw new RuntimeException(res.cause());
+                        }
+                    });
+                } else {
+                    Object result = handlerMethod.method().invoke(target, args);
+                    if (! ctx.response().ended())
+                        processHandlerResult(handlerMethod.method(), ctx, result);
+                }
+            } catch (Exception e) {
+                RpcContext rpcContext = RpcContext.getRpcContext(ctx);
+                if (rpcContext != null) {
+                    ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_JSON).end(rpcContext.getErrorMethodInvocationRpcResponse(e).encode().toString());
+                } else {
+                    throw new RuntimeException(e);
+                }
             }
         }
 
@@ -403,19 +443,37 @@ public class EasyRouting {
 
         private static boolean warnedAboutMissingParameterNames = false;
 
-        private MethodResult getMethod(Annotation annotation,
-                                              MultiMap parameters,
-                                              MultiMap formAttributes) {
-            MultiMap lowercaseParams = MultiMap.caseInsensitiveMultiMap();
-            lowercaseParams.addAll(parameters);
+        private MethodResult getMethod(RoutingContext ctx, Annotation annotation, BiFunction<String, Class<?>[], Boolean> methodFilter) {
+            for (Method method : target.getClass().getDeclaredMethods()) {
+                if (methodFilter.apply(method.getName(), method.getParameterTypes()) && method.getParameterCount() == 1 && method.getParameterTypes()[0].equals(RoutingContext.class)) {
+                    return new MethodResult(method, new String[]{method.getParameters()[0].getName()}, false);
+                }
+            }
 
+            MultiMap lowercaseParams = MultiMap.caseInsensitiveMultiMap();
+            lowercaseParams.addAll(ctx.request().params());
+
+            MultiMap formAttributes = ctx.request().method() == HttpMethod.POST ? ctx.request().formAttributes() : null;
             MultiMap lowercaseFormAttributes = formAttributes != null ? MultiMap.caseInsensitiveMultiMap() : null;
             if (lowercaseFormAttributes != null)
                 lowercaseFormAttributes.addAll(formAttributes);
 
+            String methodName = null;
+
+            RpcContext rpcContext = RpcContext.getRpcContext(ctx);
+            if (rpcContext != null) {
+                methodName = rpcContext.rpcRequest.getMethodName();
+                for (Map.Entry<String, Object> entry : rpcContext.rpcRequest.getArguments().entrySet()) {
+                    lowercaseParams.add(entry.getKey(), entry.getValue().toString());
+                }
+            }
+
             for (Method method : target.getClass().getDeclaredMethods()) {
-                Annotation methodAnnotation = method.getAnnotation(annotation.annotationType());
-                if (methodAnnotation != null && methodAnnotation.equals(annotation)) {
+                if (methodFilter.apply(method.getName(), method.getParameterTypes()) && (methodName != null && ! method.getName().equals(methodName)))
+                    continue; // Skip methods that do not match the JSON-RPC method name
+
+                Annotation methodAnnotation = annotation != null ? method.getAnnotation(annotation.annotationType()) : null;
+                if (annotation == null || (methodAnnotation != null && methodAnnotation.equals(annotation))) {
                     List<String> paramNames = new ArrayList<>();
                     int matchedParamCount = 0;
                     int optionalParamCount = 0;
@@ -423,7 +481,8 @@ public class EasyRouting {
                     boolean hasBodyParam = false;
                     boolean isFormHandler = method.getAnnotation(Form.class) != null;
 
-                    Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+                    decomposeJsonBody(ctx, method, lowercaseParams);
+
                     for (Parameter parameter : method.getParameters()) {
 
                         if (parameter.getAnnotation(Param.class) != null) {
@@ -470,7 +529,7 @@ public class EasyRouting {
                     }
 
                     int totalParamCount = matchedParamCount + otherParamCount;
-                    if (method.getParameterCount() == totalParamCount && matchedParamCount == parameters.size() + optionalParamCount) {
+                    if (method.getParameterCount() == totalParamCount && matchedParamCount == lowercaseParams.size() + optionalParamCount) {
                         return new MethodResult(method, paramNames.toArray(new String[0]), hasBodyParam);
                     }
                 }
@@ -484,7 +543,18 @@ public class EasyRouting {
                                                Class<?>[] parameterTypes,
                                                MultiMap requestParameters,
                                                Object body) {
+            if (parameterTypes.length == 1 && parameterTypes[0].equals(RoutingContext.class)) {
+                // If the method has only one parameter of type RoutingContext, return it directly
+                return new Object[]{ctx};
+            }
+
             List<Object> result = new ArrayList<>();
+
+            decomposeJsonBody(ctx, method, requestParameters);
+
+            RpcContext rpcContext = RpcContext.getRpcContext(ctx);
+            if (rpcContext != null)
+                rpcContext.getRpcRequest().populate(requestParameters);
 
             Parameter[] parameters = method.getParameters();
 
@@ -508,6 +578,17 @@ public class EasyRouting {
             }
 
             return result.toArray(new Object[0]);
+        }
+
+        private static void decomposeJsonBody(RoutingContext ctx, Method method, MultiMap requestParameters) {
+            if (CT_APPLICATION_JSON.equalsIgnoreCase(ctx.request().headers().get(CONTENT_TYPE))) {
+                if (method.getAnnotation(DecomposeBody.class) != null) {
+                    JsonObject jsonBody = ctx.body().asJsonObject();
+                    for (Map.Entry<String, Object> entry : jsonBody) {
+                        requestParameters.add(entry.getKey(), entry.getValue().toString());
+                    }
+                }
+            }
         }
 
         private Object convertBody(String contentType, Class<?> parameterType, Object body) {
@@ -558,44 +639,23 @@ public class EasyRouting {
 
         private Object convertValue(String parameterName, Class<?> parameterType, MultiMap parameters, String defaultValue) {
             String value = parameters.get(parameterName);
-            return convertValue(parameterType, value != null ? value : defaultValue);
-        }
-
-        private Object convertValue(Class<?> parameterType, String value) {
-            if (parameterType == Integer.class || parameterType == int.class)
-                return value != null ? Integer.parseInt(value) : 0;
-            if (parameterType == Short.class || parameterType == short.class)
-                return value != null ? Short.valueOf(value) : 0;
-            if (parameterType == Byte.class || parameterType == byte.class)
-                return value != null ? Byte.valueOf(value) : 0;
-            if (parameterType == Boolean.class || parameterType == boolean.class)
-                return Boolean.valueOf(value);
-            else if (parameterType == Double.class || parameterType == double.class)
-                return value != null ? Double.parseDouble(value) : 0;
-            else if (parameterType == Float.class || parameterType == float.class)
-                return value != null ? Float.parseFloat(value) : 0;
-            else
-                return value;
+            return convertValue(value != null ? value : defaultValue, parameterType);
         }
 
         @SuppressWarnings({"rawtypes", "unchecked"})
         private void processHandlerResult(Method method, RoutingContext ctx, Object result) {
-            if (method.getReturnType() == void.class) {
-                ctx.end();
-            } else {
-                Result handlerResult = result instanceof Result<?> ? (Result<?>) result : new Result(result);
-                handlerResult.setResultClass(method.getReturnType());
-                handlerResult.setAnnotations(method.getAnnotations());
-                applyHttpHeaders(method, handlerResult);
+            Result handlerResult = result instanceof Result<?> ? (Result<?>) result : new Result(result);
+            handlerResult.setResultClass(method.getReturnType());
+            handlerResult.setAnnotations(method.getAnnotations());
+            applyHttpHeaders(method, handlerResult);
 
-                Object convertedResult = convertTo(target, handlerResult.getResult(), (String) handlerResult.getHeaders().get(CONTENT_TYPE));
-                if (handlerResult.getResult() != convertedResult) {
-                    handlerResult.setResult(convertedResult);
-                    handlerResult.setResultClass(convertedResult.getClass());
-                }
-
-                handlerResult.handle(ctx);
+            Object convertedResult = convertTo(target, handlerResult.getResult(), (String) handlerResult.getHeaders().get(CONTENT_TYPE));
+            if (handlerResult.getResult() != convertedResult) {
+                handlerResult.setResult(convertedResult);
+                handlerResult.setResultClass(convertedResult.getClass());
             }
+
+            handlerResult.handle(ctx);
         }
 
         private Object convertTo(Object target, Object result, String contentType) {

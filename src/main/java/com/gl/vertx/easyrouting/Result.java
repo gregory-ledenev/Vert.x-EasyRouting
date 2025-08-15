@@ -500,40 +500,47 @@ public class Result<T> {
     public void defaultHandle(RoutingContext ctx) {
         try {
             headers.forEach(ctx.response()::putHeader);
-
             ctx.response().setStatusCode(statusCode);
-            if (result instanceof Path filePath) {
-                ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_OCTET_STREAM);
-                ctx.response().putHeader(CONTENT_DISPOSITION, MessageFormat.format("attachment; filename=\"{0}\"", filePath.getFileName().toString()));
-                ctx.response().sendFile(filePath.toString())
-                        .onSuccess(v -> ctx.response())
-                        .onFailure(ctx::fail);
-            } else if (result instanceof Buffer buffer) {
-                ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_OCTET_STREAM);
-                ctx.response().send(buffer);
-            } else if (result instanceof JsonObject jsonObject) {
-                sendJsonResponse(ctx, jsonObject.encodePrettily());
-            } else if (result instanceof JsonArray jsonArray) {
-                sendJsonResponse(ctx, jsonArray.encodePrettily());
-            } else if (result instanceof Map<?, ?> map) {
-                handleMapResult(ctx, map);
-            } else if (result instanceof Collection<?> collection) {
-                handleCollectionResult(ctx, collection);
-            } else if (result != null && result.getClass().isArray()) {
-                handleArrayResult(ctx, result);
-            } else if (result instanceof Number || result instanceof Boolean) {
-                sendPlainTextResponse(ctx, result.toString());
-            } else if (result instanceof String string) {
-                handleStringResult(ctx, string);
-            } else if (result == null) {
-                handleNullResult(ctx);
+            RpcContext rpcContext = RpcContext.getRpcContext(ctx);
+            if (rpcContext != null) {
+                Object encoded = rpcContext.getRpcResponse(result).encode();
+                ctx.response().
+                        putHeader(CONTENT_TYPE, rpcContext.contentType).
+                        end(encoded.toString());
             } else {
-                handleOtherResult(ctx, result);
+                if (result instanceof Path filePath) {
+                    ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_OCTET_STREAM);
+                    ctx.response().putHeader(CONTENT_DISPOSITION, MessageFormat.format("attachment; filename=\"{0}\"", filePath.getFileName().toString()));
+                    ctx.response().sendFile(filePath.toString())
+                            .onSuccess(v -> ctx.response())
+                            .onFailure(ctx::fail);
+                } else if (result instanceof Buffer buffer) {
+                    ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_OCTET_STREAM);
+                    ctx.response().send(buffer);
+                } else if (result instanceof JsonObject jsonObject) {
+                    sendJsonResponse(ctx, jsonObject.encode());
+                } else if (result instanceof JsonArray jsonArray) {
+                    sendJsonResponse(ctx, jsonArray.encode());
+                } else if (result instanceof Map<?, ?> map) {
+                    handleMapResult(ctx, map);
+                } else if (result instanceof Collection<?> collection) {
+                    handleCollectionResult(ctx, collection);
+                } else if (result != null && result.getClass().isArray()) {
+                    handleArrayResult(ctx, result);
+                } else if (result instanceof Number || result instanceof Boolean) {
+                    sendPlainTextResponse(ctx, result.toString());
+                } else if (result instanceof String string) {
+                    handleStringResult(ctx, string);
+                } else if (result == null) {
+                    handleNullResult(ctx);
+                } else {
+                    handleOtherResult(ctx, result);
+                }
             }
-        } catch (HttpException e) {
+        } catch(HttpException e){
             logger.error("Error sending result: ", e);
             ctx.response().setStatusCode(e.getStatusCode()).end(e.getMessage());
-        } catch (Exception e) {
+        } catch(Exception e){
             logger.error("Error handling result: ", e);
             ctx.response().setStatusCode(500).end();
         }
@@ -553,9 +560,8 @@ public class Result<T> {
     }
 
     private void sendJsonResponse(RoutingContext ctx, String json) {
-        ctx.response()
-                .putHeader(CONTENT_TYPE, CT_APPLICATION_JSON)
-                .end(json);
+        ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_JSON);
+        ctx.response().end(json);
     }
 
     private void sendPlainTextResponse(RoutingContext ctx, String text) {
@@ -567,13 +573,13 @@ public class Result<T> {
     private void handleMapResult(RoutingContext ctx, Map<?, ?> map) {
         JsonObject jsonObject = new JsonObject();
         map.forEach((key, value) -> jsonObject.put(key.toString(), value));
-        sendJsonResponse(ctx, jsonObject.encodePrettily());
+        sendJsonResponse(ctx, jsonObject.encode());
     }
 
     private void handleCollectionResult(RoutingContext ctx, Collection<?> collection) {
         JsonArray jsonArray = new JsonArray();
         collection.forEach(jsonArray::add);
-        sendJsonResponse(ctx, jsonArray.encodePrettily());
+        sendJsonResponse(ctx, jsonArray.encode());
     }
 
     private void handleArrayResult(RoutingContext ctx, Object array) {
@@ -582,7 +588,7 @@ public class Result<T> {
         for (int i = 0; i < length; i++) {
             jsonArray.add(java.lang.reflect.Array.get(array, i));
         }
-        sendJsonResponse(ctx, jsonArray.encodePrettily());
+        sendJsonResponse(ctx, jsonArray.encode());
     }
 
     private void handleStringResult(RoutingContext ctx, String string) {
@@ -614,7 +620,7 @@ public class Result<T> {
     private void handleOtherResult(RoutingContext ctx, Object result) {
         try {
             JsonObject jsonObject = JsonObject.mapFrom(result);
-            sendJsonResponse(ctx, jsonObject.encodePrettily());
+            sendJsonResponse(ctx, jsonObject.encode());
         } catch (Exception e) {
             logger.error("Failed to convert result to JSON: " + result, e);
             sendPlainTextResponse(ctx, result.toString());

@@ -4,8 +4,7 @@ EasyRouting is an experimental lightweight annotation-based HTTP routing library
 for Vert.x web applications. It simplifies route configuration by allowing
 developers to define routes using annotations and automatically handles
 parameter binding and response processing. While inspired by JAX-RS and
-SpringBoot's
-annotation-based routing patterns, it maintains a focused, lightweight
+SpringBoot's annotation-based routing patterns, it maintains a focused, lightweight
 implementation without attempting to replicate SpringBoot's entire feature set.
 
 EasyRouting enables you to build web applications effortlessly, even without
@@ -13,9 +12,8 @@ prior knowledge of Vert.x. To get started, you only need a basic understanding
 of HTTP and general knowledge of Java.
 
 You need to know a bit about HTTP and some basic Java. Although EasyRouting runs
-on Vert.x, you truly don’t have to care
-about the internals like request objects or response things. What do you
-actually do?
+on Vert.x, you truly don’t have to care about the internals like request objects 
+or response things. What do you actually do?
 
 - Make your class extend Application
 - Write regular methods for your app’s logic, add simple annotations for HTTP
@@ -62,6 +60,7 @@ simplifies the development process while still providing powerful features.
 - Builtin JWT authentication and role-based authorization
 - Binding methods to HTTP error codes
 - Ready-to use application class for prototyping and testing
+- JSON-RPC 2.0 support
 
 ## EasyRouting Application
 
@@ -144,6 +143,34 @@ public static void main(String[] args) {
             module(new UserApplicationModule()).
             jwtAuth(JWT_SECRET, "/api/*").
             start();
+}
+```
+### JSON-RPC Application Module
+
+EasyRoting provides a special `JsonRpcApplicationModule` class that you can extend to create JSON-RPC 2.0 compliant
+application modules. You can then register these modules with your Application using the `Application.module(...)` method. The
+`JsonRpcApplicationModule` class automatically handles JSON-RPC request parsing, response formatting, and error handling, allowing you to focus on implementing the actual method logic.
+
+To let your module be recognized as a JSON-RPC module, you need:
+1. Subclass the `JsonRpcApplicationModule`` class.
+2. Annotate the class with `@JsonRpc` to indicate that it is a JSON-RPC module.
+3. Override the `handleJsonRpcRequest()` method to provide a `@POST` annotation with the endpoint path.
+4. Implement all required methods that can be accessible via JSON-RPC.
+
+```java
+@JsonRpc
+public class JsonRpcTestApplicationModule extends JsonRpcApplicationModule<TestApplicationImpl> {
+
+    // Handle JSON-RPC requests at the specified endpoint
+    @POST("/api/jsonrpc/test/*")
+    public void handleJsonRpcRequest(RoutingContext ctx) {
+        super.handleJsonRpcRequest(ctx);
+    }
+
+    // Example JSON-RPC method
+    public int multiply(@Param("a") int a , @Param("b") int b) {
+        return a * b;
+    }
 }
 ```
 
