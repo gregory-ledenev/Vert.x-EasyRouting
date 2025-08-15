@@ -152,11 +152,15 @@ application modules. You can then register these modules with your Application u
 `JsonRpcApplicationModule` class automatically handles JSON-RPC request parsing, response formatting, and error handling, allowing you to focus on implementing the actual method logic.
 
 To let your module be recognized as a JSON-RPC module, you need:
+
 1. Subclass the `JsonRpcApplicationModule`` class.
 2. Annotate the class with `@JsonRpc` to indicate that it is a JSON-RPC module.
-3. Override the `handleJsonRpcRequest()` method to provide a `@POST` annotation with the endpoint path.
-4. Implement all required methods that can be accessible via JSON-RPC.
-
+3. Override the `handleJsonRpcRequest()` method to provide a `@POST` annotation
+   with the endpoint path.
+4. Implement all required methods that can be accessible via JSON-RPC. Note:
+   that methods don't require `@POST` annotations as the endpoint for entire 
+   application module is clearly defined by a `@POST` of `handleJsonRpcRequest()` 
+   method.
 ```java
 @JsonRpc
 public class JsonRpcTestApplicationModule extends JsonRpcApplicationModule<TestApplicationImpl> {
