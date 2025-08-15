@@ -173,6 +173,10 @@ public class JsonRpcTestApplicationModule extends JsonRpcApplicationModule<TestA
     }
 }
 ```
+The following are limitations:
+- Batch calling is not supported.
+- Positional parameters are not supported
+- Response to Notifications will be provided
 
 ## Using With Vert.x Router
 
