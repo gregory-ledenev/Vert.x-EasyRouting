@@ -133,15 +133,20 @@ public class RpcController {
     }
 
     private static void addClassName(Class<?> type, TreeSet<String> classNames) {
-        if (needImportType(type))
-            classNames.add(type.getName() + ";");
+        Class<?> importType = importType(type);
+        if (importType != null)
+            classNames.add(importType.getName() + ";");
     }
 
-    private static boolean needImportType(Class<?> type) {
+    private static Class<?> importType(Class<?> type) {
+        Class<?> result = type;
+
         if (type.isArray())
-            return needImportType(type.getComponentType());
-        else
-            return ! (type.isPrimitive() || type.equals(Void.class));
+            result = importType(type.getComponentType());
+        else if (type.isPrimitive() || type.equals(Void.class))
+            result = null;
+
+        return result;
     }
 
     private static final Set<Class<? extends Annotation>> PARAMETER_ANNOTATIONS = Set.of(

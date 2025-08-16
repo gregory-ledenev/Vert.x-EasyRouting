@@ -35,6 +35,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.text.MessageFormat;
 import java.util.Base64;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 
 import static com.gl.vertx.easyrouting.Result.*;
@@ -74,10 +75,11 @@ public class JsonRpcContext extends RpcContext {
         String version = rpcRequestObject.getString(KEY_VERSION);
         if (version != null) {
             if (VERSION.equals(version)) {
+                JsonObject params = rpcRequestObject.getJsonObject(KEY_PARAMS);
                 return new RpcRequest(
                         rpcRequestObject.getString(KEY_ID),
                         rpcRequestObject.getString(KEY_METHOD),
-                        rpcRequestObject.getJsonObject(KEY_PARAMS).getMap());
+                        params != null ? params.getMap() : Collections.emptyMap());
             } else {
                 throw new IllegalArgumentException(MessageFormat.format("Invalid or unsupported JSON-RPC payload: {0}. Only 2.0 is supported.", rpcRequestObject.getString("jsonrpc")));
             }
