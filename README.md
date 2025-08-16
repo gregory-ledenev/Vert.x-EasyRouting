@@ -64,15 +64,29 @@ simplifies the development process while still providing powerful features.
 
 ## EasyRouting Application
 
-There is a special Application class that allows building minimal applications
-for prototyping and testing purposes without learning how to create a full
-Vert.x application.
+There is a special Application class that allows building applications with easy
+for production, prototyping and testing purposes without learning how to create 
+a full Vert.x application.
 
 ```java
 class TestApplication extends Application {
     @GET("/*")
     String hello() {
         return "Hello from TestApplication!";
+    }
+
+    public static void main(String[] args) {
+        TestApplication app = new TestApplication().start(8080);
+    }
+}
+```
+Making JSON-RPC application is as easy as:
+
+```java
+@Rpc
+class TestApplication extends Application {
+    public String hello() {
+        return "Hello from JSON-RPC TestApplication!";
     }
 
     public static void main(String[] args) {
