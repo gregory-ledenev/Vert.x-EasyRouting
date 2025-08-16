@@ -35,7 +35,20 @@ static class HelloWorld extends Application {
         new HelloWorld().start();
     }
 }
+```
+Making JSON-RPC application is as easy as:
 
+```java
+@Rpc
+class TestApplication extends Application {
+    public String hello() {
+        return "Hello from JSON-RPC TestApplication!";
+    }
+
+    public static void main(String[] args) {
+        TestApplication app = new TestApplication().start(8080);
+    }
+}
 ```
 
 This library is ideal for rapid prototyping, testing, or learning the basics
@@ -73,20 +86,6 @@ class TestApplication extends Application {
     @GET("/*")
     String hello() {
         return "Hello from TestApplication!";
-    }
-
-    public static void main(String[] args) {
-        TestApplication app = new TestApplication().start(8080);
-    }
-}
-```
-Making JSON-RPC application is as easy as:
-
-```java
-@Rpc
-class TestApplication extends Application {
-    public String hello() {
-        return "Hello from JSON-RPC TestApplication!";
     }
 
     public static void main(String[] args) {
