@@ -170,6 +170,7 @@ public class JsonRpcTestApplication extends Application {
 }
 ```
 
+#### JSON-RPC Scheme Discovery
 You can request a scheme for the JSON-RPC app or module by sending a simple `GET`
 request to the endpoint. By default, schema discovery is turned off for
 security reasons, but you can enable it by specifying the `provideScheme = true`
@@ -198,7 +199,13 @@ public interface Service {
     String multiplyAsString(int a, int b);
 }
 ```
+#### Controlling Which Methods are Exported
 
+`@Rpc` annotation allows you to define a policy which methods are exported via JSON-RPC. You can set that policy via the`exportPolicy` parameter of the `@Rpc` annotation. The default policy is `RpcExportPolicy.ALL`, which means that all public methods are exported. You can also set `RpcExportPolicy.NONE` to disable exporting any methods.
+
+You can annotate particular methods with `@RpcInclude` to explicitly export them, or with `@RpcExclude` to explicitly exclude them from being exported. This allows you to have fine-grained control over which methods are available via JSON-RPC.
+
+#### Limitations
 The following are limitations:
 - Batch calling is not supported.
 - Positional parameters are not supported

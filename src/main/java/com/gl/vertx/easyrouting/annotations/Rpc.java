@@ -26,6 +26,7 @@
 
 package com.gl.vertx.easyrouting.annotations;
 
+import com.gl.vertx.easyrouting.RpcExportPolicy;
 import com.gl.vertx.easyrouting.RpcType;
 
 import java.lang.annotation.ElementType;
@@ -37,13 +38,40 @@ import java.lang.annotation.Target;
  * Annotation used to mark classes that implement RPC services. The annotated class will be registered as an RPC service
  * with the specified type and path.
  * <p>
- * The default RPC type is {@link RpcType#JsonRpc} and the default path is "/", which means the service will
- * be registered at the root path.
+ * The default RPC type is {@link RpcType#JsonRpc} and the default path is "/", which means the service will be
+ * registered at the root path.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface Rpc {
+    /**
+     * Specifies the type of RPC service. Currently, only JSON-RPC is supported.
+     *
+     * @return the RPC type
+     */
     RpcType rpcType() default RpcType.JsonRpc;
+
+    /**
+     * Specifies the endpoint path for the RPC service. The default path is "/".
+     *
+     * @return the base path for the RPC service
+     */
     String path() default "/";
+
+    /**
+     * Indicates whether to allow getting the scheme for the RPC service. The default value is false, meaning the scheme
+     * will not be included unless explicitly specified. If allowed, the scheme can be obtained via {@code GET} for
+     * the service endpoint.
+     *
+     * @return true if the scheme should be included in the OpenAPI documentation, false otherwise
+     */
     boolean provideScheme() default false;
+
+    /**
+     * Specifies the export policy for the RPC service. The default is {@link RpcExportPolicy#All}, meaning all
+     * methods will be exported.
+     *
+     * @return the export policy for the RPC service
+     */
+    RpcExportPolicy exportPolicy() default RpcExportPolicy.All;
 }

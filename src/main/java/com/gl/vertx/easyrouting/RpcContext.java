@@ -26,6 +26,9 @@
 
 package com.gl.vertx.easyrouting;
 
+import com.gl.vertx.easyrouting.annotations.Rpc;
+import com.gl.vertx.easyrouting.annotations.RpcExclude;
+import com.gl.vertx.easyrouting.annotations.RpcInclude;
 import io.vertx.core.MultiMap;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -143,7 +146,19 @@ public abstract class RpcContext {
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     public static boolean canExportMethod(Method method) {
         int mods = method.getModifiers();
-        return Modifier.isPublic(mods) && ! Modifier.isStatic(mods);
+        boolean result = Modifier.isPublic(mods) && ! Modifier.isStatic(mods);
+
+        if (result) {
+            Rpc rpc = method.getDeclaringClass().getAnnotation(Rpc.class);
+            if (rpc != null)
+                result = rpc.exportPolicy() == RpcExportPolicy.All;
+            if (method.getAnnotation(RpcExclude.class) != null)
+                result = false;
+            else if (method.getAnnotation(RpcInclude.class) != null)
+                result = true;
+        }
+
+        return result;
     }
 
     public static class RpcException extends Exception {

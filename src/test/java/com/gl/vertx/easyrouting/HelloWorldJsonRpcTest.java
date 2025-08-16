@@ -27,6 +27,8 @@
 package com.gl.vertx.easyrouting;
 
 import com.gl.vertx.easyrouting.annotations.Rpc;
+import com.gl.vertx.easyrouting.annotations.RpcExclude;
+import com.gl.vertx.easyrouting.annotations.RpcInclude;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -36,18 +38,41 @@ import java.net.http.HttpResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@SuppressWarnings("SameReturnValue")
-@Rpc(path = "/*", provideScheme = true)
-class HelloWorldJsonRpcApplication extends Application {
-    public String hello() {
-        return "Hello, World!";
-    }
-    public static void main(String[] args) {
-        new HelloWorldJsonRpcApplication().start();
-    }
-}
-
 public class HelloWorldJsonRpcTest {
+    @SuppressWarnings("SameReturnValue")
+    @Rpc(path = "/*", provideScheme = true)
+    static class HelloWorldJsonRpcApplication extends Application {
+        public static void main(String[] args) {
+            new HelloWorldJsonRpcApplication().start();
+        }
+
+        public String hello() {
+            return "Hello, World!";
+        }
+
+        @RpcExclude
+        public String bye() {
+            return "Bye";
+        }
+    }
+
+    @SuppressWarnings("SameReturnValue")
+    @Rpc(path = "/*", provideScheme = true, exportPolicy = RpcExportPolicy.None)
+    static class HelloWorldJsonRpcApplicationNoneExportPolicy extends Application {
+        public static void main(String[] args) {
+            new HelloWorldJsonRpcApplicationNoneExportPolicy().start();
+        }
+
+        @RpcInclude
+        public String hello() {
+            return "Hello, World!";
+        }
+
+        public String bye() {
+            return "Bye";
+        }
+    }
+
     @Test
     void testJsonRpc() throws Throwable {
         Application app = new HelloWorldJsonRpcApplication().
@@ -58,7 +83,7 @@ public class HelloWorldJsonRpcTest {
                             .uri(URI.create("http://localhost:8080"))
                             .header("Content-Type", "application/json")
                             .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "main", "params": {"args":[]}, "id": 2}"""))
+                                                                      {"jsonrpc": "2.0", "method": "hello", "params": {}, "id": 2}"""))
                             .build();
 
                     try {
@@ -66,6 +91,96 @@ public class HelloWorldJsonRpcTest {
                         assertEquals(200, response.statusCode());
                         assertEquals("""
                                                 {"jsonrpc":"2.0","id":"2","result":"Hello, World!"}""", response.body());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testJsonRpcByeExcluded() throws Throwable {
+        Application app = new HelloWorldJsonRpcApplication().
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {"jsonrpc": "2.0", "method": "bye", "params": {}, "id": 2}"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("""
+                                                {"jsonrpc":"2.0","id":"2","error":{"code":-32601,"message":"Method not found: bye"}}""", response.body());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testJsonRpcNoneExportPolicyHelloIncluded() throws Throwable {
+        Application app = new HelloWorldJsonRpcApplicationNoneExportPolicy().
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {"jsonrpc": "2.0", "method": "hello", "params": {}, "id": 2}"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("""
+                                                {"jsonrpc":"2.0","id":"2","result":"Hello, World!"}""", response.body());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testJsonRpcNoneExportPolicyByeExcluded() throws Throwable {
+        Application app = new HelloWorldJsonRpcApplicationNoneExportPolicy().
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {"jsonrpc": "2.0", "method": "bye", "params": {}, "id": 2}"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("""
+                                               {"jsonrpc":"2.0","id":"2","error":{"code":-32601,"message":"Method not found: bye"}}""", response.body());
                         System.out.println(response.body());
                     } catch (Throwable e) {
                         throw new RuntimeException(e);
