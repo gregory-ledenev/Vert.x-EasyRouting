@@ -31,16 +31,14 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.METHOD)
-public /**
- * Container annotation that holds multiple {@link com.gl.vertx.easyrouting.HttpHeaders.Header} annotations.
+/**
+ * Container annotation that holds multiple {@link com.gl.vertx.easyrouting.annotations.HttpHeaders} annotations.
  * This annotation is used automatically when multiple @Header annotations
  * are applied to the same method. Note: you cannot use both @Header and @Headers annotations, just use @Header
  * annotation multiple times.
- *
- * @return an array of Header annotations
  */
-@interface HttpHeaders {
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)
+public @interface HttpHeaders {
     HttpHeader[] value();
 }

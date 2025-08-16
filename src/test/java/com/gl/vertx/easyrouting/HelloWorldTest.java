@@ -36,6 +36,7 @@ import java.net.http.HttpResponse;
 import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@SuppressWarnings("SameReturnValue")
 class HelloWorldApplication extends Application {
     @GET("/*")
     public String hello() {

@@ -36,7 +36,8 @@ import java.net.http.HttpResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@Rpc(path = "/*")
+@SuppressWarnings("SameReturnValue")
+@Rpc(path = "/*", provideScheme = true)
 class HelloWorldJsonRpcApplication extends Application {
     public String hello() {
         return "Hello, World!";
@@ -57,7 +58,7 @@ public class HelloWorldJsonRpcTest {
                             .uri(URI.create("http://localhost:8080"))
                             .header("Content-Type", "application/json")
                             .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "hello", "id": 2}"""))
+                                                                      {"jsonrpc": "2.0", "method": "main", "params": {"args":[]}, "id": 2}"""))
                             .build();
 
                     try {

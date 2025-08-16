@@ -2,7 +2,6 @@ package com.gl.vertx.easyrouting;
 
 import com.gl.vertx.easyrouting.annotations.*;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.web.RoutingContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -10,9 +9,11 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 
 import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 import static com.gl.vertx.easyrouting.TestApplication.User.*;
@@ -38,6 +39,22 @@ public class TestApplication {
             return a * b * c;
         }
 
+        @Description("""
+                     Multiplies list of integers
+                     
+                     @param a list""")
+        public int multiply(@Param("list") List<Integer> list) {
+            return list.stream().reduce(1, (x, y) -> x * y);
+        }
+
+        @Description("""
+                     Multiplies array of integers
+                     
+                     @param a list""")
+        public int multiply(@Param("list") int[] array) {
+            return IntStream.of(array).reduce(1, (x, y) -> x * y);
+        }
+
         @Description("Multiplies two integers and returns the result as a string")
         public String multiplyAsString(@Param("a") int a , @Param("b") int b) {
             return String.valueOf(a * b);
@@ -58,6 +75,7 @@ public class TestApplication {
             return Map.of("a", a, "b", b);
         }
 
+        @SuppressWarnings("EmptyMethod")
         @Description("A void method that does nothing")
         public void voidMethod(@Param("a") int a , @Param("b") int b) {
         }
@@ -85,6 +103,14 @@ public class TestApplication {
             return application.userService.updateUser(user, id);
         }
 
+        public List<com.gl.vertx.easyrouting.User> updateUsers(@Param("ids") String[] ids, @Param("users") com.gl.vertx.easyrouting.User[] users) {
+            List<com.gl.vertx.easyrouting.User> result = new ArrayList<>();
+            for (int i = 0; i < users.length; i++) {
+                result.add(application.userService.updateUser(users[i], ids[i]));
+            }
+            return result;
+        }
+
         public boolean deleteUser(@Param("id") String id) {
             return application.userService.deleteUser(id);
         }
@@ -100,9 +126,30 @@ public class TestApplication {
             return user.toString();
         }
 
+        @ConvertsTo("text/user-string")
+        public static String convertUsersToString(User[] users) {
+            return Arrays.stream(users)
+                    .map(User::toString)
+                    .reduce((s1, s2) -> s1 + "+" + s2)
+                    .orElse("");
+        }
+
         @ConvertsFrom("text/user-string")
         public static User convertUserFromString(String content) {
             return of(content);
+        }
+
+        @ConvertsFrom("text/user-string")
+        public static User[] convertUsersFromString(String content) {
+            String [] parts = content.split("\\+");
+            if (parts.length > 0) {
+                User[] users = new User[parts.length];
+                for (int i = 0; i < parts.length; i++) {
+                    users[i] = of(parts[i]);
+                }
+                return users;
+            }
+            return new User[0];
         }
 
         @ConvertsTo("text/xml")
@@ -116,6 +163,7 @@ public class TestApplication {
         }
     }
 
+    @SuppressWarnings("SameReturnValue")
     @Rpc(path = "/api/jsonrpc/root" , provideScheme = true)
     static class TestApplicationImpl extends Application {
         public static final String JWT_PASSWORD = "veeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeery long password";
@@ -124,6 +172,7 @@ public class TestApplication {
             return a + b + c;
         }
 
+        @SuppressWarnings("EmptyMethod")
         @Deprecated
         void doNothing() {
         }
@@ -208,13 +257,19 @@ public class TestApplication {
             return user;
         }
 
+        @ContentType("text/user-string")
+        @POST("/testMultipleConversionFrom")
+        public User[] testMultipleConversionFrom(@BodyParam("users") User[] users) {
+            return users;
+        }
+
         @DecomposeBody
         @POST("/composeUser")
         public User composeUser(String name, String email) {
             return new User(name, email);
         }
 
-        UserService userService = new UserService();
+        final UserService userService = new UserService();
 
         public UserService userService() {
             return userService;
@@ -278,12 +333,14 @@ public class TestApplication {
                 onStartCompletion(application -> {
                     try {
                         assertEquals("""
-                                {
-                                  "text/user-string"->com.gl.vertx.easyrouting.TestApplication$User = java.lang.String com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserToString(com.gl.vertx.easyrouting.TestApplication$User)
-                                  "text/user-string"<-com.gl.vertx.easyrouting.TestApplication$User = com.gl.vertx.easyrouting.TestApplication$User com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserFromString(java.lang.String)
-                                  "text/xml"->com.gl.vertx.easyrouting.TestApplication$User = java.lang.String com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserToXml(com.gl.vertx.easyrouting.TestApplication$User)
-                                  "text/xml"<-com.gl.vertx.easyrouting.TestApplication$User = com.gl.vertx.easyrouting.TestApplication$User com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserFromXml(java.lang.String)
-                                }""", application.getAnnotatedConverters().toString());
+                                     {
+                                       "text/user-string"->[Lcom.gl.vertx.easyrouting.TestApplication$User; = java.lang.String com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUsersToString([Lcom.gl.vertx.easyrouting.TestApplication$User;)
+                                       "text/user-string"->com.gl.vertx.easyrouting.TestApplication$User = java.lang.String com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserToString(com.gl.vertx.easyrouting.TestApplication$User)
+                                       "text/user-string"<-[Lcom.gl.vertx.easyrouting.TestApplication$User; = [Lcom.gl.vertx.easyrouting.TestApplication$User; com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUsersFromString(java.lang.String)
+                                       "text/user-string"<-com.gl.vertx.easyrouting.TestApplication$User = com.gl.vertx.easyrouting.TestApplication$User com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserFromString(java.lang.String)
+                                       "text/xml"->com.gl.vertx.easyrouting.TestApplication$User = java.lang.String com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserToXml(com.gl.vertx.easyrouting.TestApplication$User)
+                                       "text/xml"<-com.gl.vertx.easyrouting.TestApplication$User = com.gl.vertx.easyrouting.TestApplication$User com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserFromXml(java.lang.String)
+                                     }""", application.getAnnotatedConverters().toString());
                     } finally {
                         application.stop();
                     }
@@ -367,6 +424,70 @@ public class TestApplication {
                         assertEquals(200, response.statusCode());
                         assertEquals("""
                                      {"jsonrpc":"2.0","id":"2","result":6}""", response.body());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testJsonMultiplyList() throws Throwable {
+        Application app = new TestApplicationImpl().
+                module(new JsonRpcTestApplicationModule()).
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
+                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {"jsonrpc": "2.0", "method": "multiply", "params": {"list":[1, 2, 3, 4]}, "id": 2}"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("""
+                                     {"jsonrpc":"2.0","id":"2","result":24}""", response.body());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testJsonMultiplyArray() throws Throwable {
+        Application app = new TestApplicationImpl().
+                module(new JsonRpcTestApplicationModule()).
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
+                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {"jsonrpc": "2.0", "method": "multiply", "params": {"list":[1, 2, 3, 4, 5]}, "id": 2}"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("""
+                                     {"jsonrpc":"2.0","id":"2","result":120}""", response.body());
                         System.out.println(response.body());
                     } catch (Throwable e) {
                         throw new RuntimeException(e);
@@ -742,6 +863,50 @@ public class TestApplication {
     }
 
     @Test
+    void testJsonRpcUpdateUsers() throws Throwable {
+        Application app = new TestApplicationImpl().
+                module(new JsonRpcUserApplicationModule()).
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
+                            .uri(URI.create("http://localhost:8080/api/users/jsonrpc"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {
+                                                                         "jsonrpc":"2.0",
+                                                                         "method":"updateUsers",
+                                                                         "params":{
+                                                                            "ids":["3"],
+                                                                            "users":[{
+                                                                               "id":"3",
+                                                                               "name":"Michael Smith JJJJJJJ",
+                                                                               "email":"mike.smith@example.com"
+                                                                            }]
+                                                                         },
+                                                                         "id":2
+                                                                      }"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("""
+                                     {"jsonrpc":"2.0","id":"2","result":[{"id":"3","name":"Michael Smith JJJJJJJ","email":"mike.smith@example.com"}]}""", response.body());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
     void testConversionTo() throws Throwable {
         TestApplicationImpl app = new TestApplicationImpl().
                 module(new TestConverters()).
@@ -787,6 +952,35 @@ public class TestApplication {
                         assertEquals(200, response.statusCode());
                         assertEquals("text/user-string", response.headers().map().get("content-type").get(0));
                         assertEquals("User[name=John Doe, email=john.doe@gmail.com]", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testMultipleConversionFrom() throws Throwable {
+        TestApplicationImpl app = new TestApplicationImpl().
+                module(new TestConverters()).
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/testMultipleConversionFrom"))
+                            .header("Content-Type", "text/user-string")
+                            .POST(HttpRequest.BodyPublishers.ofString("User[name=John Doe, email=john.doe@gmail.com]+User[name=Mike Hardy, email=mike.hardy@gmail.com]"))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("text/user-string", response.headers().map().get("content-type").get(0));
+                        assertEquals("User[name=John Doe, email=john.doe@gmail.com]+User[name=Mike Hardy, email=mike.hardy@gmail.com]", response.body());
                     } catch (Throwable e) {
                         throw new RuntimeException(e);
                     } finally {
@@ -1080,6 +1274,7 @@ public class TestApplication {
         app.handleCompletionHandlerFailure();
     }
 
+    @SuppressWarnings("SameReturnValue")
     static class HelloWorld extends Application {
         @GET(value = "/*")
         String hello() {

@@ -41,7 +41,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.annotation.*;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
@@ -49,8 +48,6 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.util.*;
-import java.util.function.BiFunction;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
@@ -119,6 +116,7 @@ public class EasyRouting {
      * @param jwtSecret  the secret key used for signing JWT tokens. It can be a plain password or a string in PEM format
      * @return the created route with JWT authentication applied
      */
+    @SuppressWarnings("UnusedReturnValue")
     public static Route applyJWTAuth(Vertx vertx, Router router,
                                      String path,
                                      String jwtSecret) {
@@ -143,7 +141,6 @@ public class EasyRouting {
     private static String redirect(int statusCode, Object target) {
         String result = null;
 
-        all:
         for (Method method : target.getClass().getDeclaredMethods()) {
             HandlesStatusCode statusCodeAnnotation = method.getAnnotation(HandlesStatusCode.class);
             if (statusCodeAnnotation != null && statusCodeAnnotation.value() == statusCode) {
@@ -153,7 +150,7 @@ public class EasyRouting {
                         result = getPathForAnnotation(methodAnnotation);
                     } catch (Exception e) {
                         LoggerFactory.getLogger(target.getClass()).error("Failed to get redirect path for method: " + methodAnnotation, e);
-                        break all;
+                        break;
                     }
                 }
             }
@@ -331,7 +328,7 @@ public class EasyRouting {
             this.annotatedConverters = setupAnnotatedConverters(target);
         }
 
-        private void obtainRpcContext(RoutingContext ctx, Object target) {
+        private void obtainRpcContext(RoutingContext ctx, Object target) throws RpcContext.RpcException {
             if (annotation != null)
                 return;
 
@@ -391,6 +388,9 @@ public class EasyRouting {
                 } else {
                     throw new HttpException(403, "Access denied"); // exception to let failure handler handle it
                 }
+            } catch (RpcContext.RpcException e) {
+                e.getRpcResponse().handle(ctx);
+                logger.error("Failed to get RpcContext", e);
             } catch (HttpException e) {
                 errorHandlerInvocation(annotation, ctx.request().params().names(), e);
                 throw e;
@@ -400,12 +400,12 @@ public class EasyRouting {
             }
         }
 
-        private void invokeHandlerMethod(RoutingContext ctx, MethodResult handlerMethod, Object[] args) throws IllegalAccessException, InvocationTargetException {
+        private void invokeHandlerMethod(RoutingContext ctx, MethodResult handlerMethod, Object[] args) {
             try {
                 if (handlerMethod.method().isAnnotationPresent(Blocking.class)) {
                     ctx.vertx().executeBlocking(promise -> {
                         // Blocking operation
-                        Object result = null;
+                        Object result;
                         try {
                             result = handlerMethod.method().invoke(target, args);
                         } catch (Exception e) {
@@ -461,17 +461,15 @@ public class EasyRouting {
                 lowercaseFormAttributes.addAll(formAttributes);
 
             String methodName = null;
-
             RpcContext rpcContext = RpcContext.getRpcContext(ctx);
             if (rpcContext != null) {
                 methodName = rpcContext.rpcRequest.getMethodName();
-                for (Map.Entry<String, Object> entry : rpcContext.rpcRequest.getArguments().entrySet()) {
-                    lowercaseParams.add(entry.getKey(), entry.getValue().toString());
-                }
+                for (Map.Entry<String, Object> entry : rpcContext.rpcRequest.getArguments().entrySet())
+                    lowercaseParams.add(entry.getKey(), ""); // put empty value just to populate parameter name
             }
 
             for (Method method : declaredMethods) {
-                if (methodName != null && ! method.getName().equals(methodName))
+                if (methodName != null && (! RpcContext.canExportMethod(method) || ! method.getName().equals(methodName)))
                     continue;
 
                 Annotation methodAnnotation = annotation != null ? method.getAnnotation(annotation.annotationType()) : null;
@@ -569,8 +567,6 @@ public class EasyRouting {
             decomposeJsonBody(ctx, method, requestParameters);
 
             RpcContext rpcContext = RpcContext.getRpcContext(ctx);
-            if (rpcContext != null)
-                rpcContext.getRpcRequest().populate(requestParameters);
 
             Parameter[] parameters = method.getParameters();
 
@@ -588,9 +584,9 @@ public class EasyRouting {
                 } else {
                     OptionalParam optionalParam = parameter.getAnnotation(OptionalParam.class);
                     if (optionalParam != null) {
-                        result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters, optionalParam.defaultValue()));
+                        result.add(convertValue(rpcContext, parameterNames[i], parameterTypes[i], requestParameters, optionalParam.defaultValue()));
                     } else {
-                        result.add(convertValue(parameterNames[i], parameterTypes[i], requestParameters, null));
+                        result.add(convertValue(rpcContext, parameterNames[i], parameterTypes[i], requestParameters, null));
                     }
                 }
             }
@@ -618,7 +614,7 @@ public class EasyRouting {
         }
 
         static Object convertValue(Object value, Class<?> to) {
-            if (to.isAssignableFrom(value.getClass()))
+            if (! to.isArray() && to.isAssignableFrom(value.getClass()) )
                 return value; // No conversion needed
 
             if (to == String.class) {
@@ -637,12 +633,16 @@ public class EasyRouting {
                 return Boolean.parseBoolean(value.toString());
             } else if (to == Buffer.class) {
                 return value instanceof Buffer buffer ? buffer : Buffer.buffer(value.toString());
-            } else if (!to.isPrimitive() && !to.isArray()) {
+            } else if (!to.isPrimitive()) {
                 try {
-                    return new JsonMapper().readValue(value.toString(), to);
+                    if (value instanceof Map || value instanceof List || value instanceof JsonObject || value instanceof JsonArray)
+                        return new JsonMapper().convertValue(value, to);
+                    else if (value instanceof String)
+                        return new JsonMapper().readValue(value.toString(), to);
                 } catch (Exception e) {
                     throw new IllegalArgumentException("Failed to convert value to " + to.getName(), e);
                 }
+                return value;
             }
 
             throw new IllegalArgumentException("Unsupported value type: " + to);
@@ -655,8 +655,10 @@ public class EasyRouting {
             return result;
         }
 
-        private Object convertValue(String parameterName, Class<?> parameterType, MultiMap parameters, String defaultValue) {
-            String value = parameters.get(parameterName);
+        private Object convertValue(RpcContext rpcContext, String parameterName, Class<?> parameterType, MultiMap parameters, String defaultValue) {
+            Object value = rpcContext != null ? rpcContext.getRpcRequest().getArguments().get(parameterName) : null;
+            if (value == null)
+                value = parameters.get(parameterName);
             return convertValue(value != null ? value : defaultValue, parameterType);
         }
 

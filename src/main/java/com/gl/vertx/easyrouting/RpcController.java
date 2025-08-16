@@ -53,7 +53,7 @@ public class RpcController {
      */
     public RpcController(Object target) {
         this.target = target;
-        routingContextHandler = new EasyRouting.RoutingContextHandler((Annotation) null, target);
+        routingContextHandler = new EasyRouting.RoutingContextHandler(null, target);
     }
 
     /**
@@ -99,6 +99,9 @@ public class RpcController {
         }
         result.add("public interface Service {");
         for (Method method : target.getClass().getDeclaredMethods()) {
+            if (! RpcContext.canExportMethod(method))
+                continue;
+
             addClassName(method.getReturnType(), classNames);
 
             List<String> parameters = new ArrayList<>();

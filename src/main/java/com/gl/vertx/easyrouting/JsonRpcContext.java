@@ -29,6 +29,7 @@ package com.gl.vertx.easyrouting;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.RequestBody;
 import io.vertx.ext.web.RoutingContext;
 
 import java.lang.reflect.InvocationTargetException;
@@ -63,25 +64,37 @@ public class JsonRpcContext extends RpcContext {
      * Create a new JsonRpcContext with the given JSON request object.
      * This constructor extracts the JSON-RPC request information from the provided JsonObject.
      *
-     * @param jsonRequest the JSON object representing the JSON-RPC request
+     * @param body the body
      * @throws IllegalArgumentException if the JSON-RPC version is not supported or if the request is invalid
      */
-    public JsonRpcContext(JsonObject jsonRequest) {
+    public JsonRpcContext(RequestBody body) throws RpcException {
         super(CT_APPLICATION_JSON, RpcType.JsonRpc);
-        rpcRequest = getRpcRequest(jsonRequest);
+        rpcRequest = getRpcRequest(body);
     }
 
-    private RpcRequest getRpcRequest(JsonObject rpcRequestObject) {
+    private RpcRequest getRpcRequest(RequestBody body) throws RpcException {
+        JsonObject rpcRequestObject;
+        try {
+            rpcRequestObject = body.asJsonObject();
+        } catch (Exception e) {
+            throw new RpcException(getInvalidRequestRpcResponse(e));
+        }
+
         String version = rpcRequestObject.getString(KEY_VERSION);
         if (version != null) {
+            String id = rpcRequestObject.getString(KEY_ID);
             if (VERSION.equals(version)) {
-                JsonObject params = rpcRequestObject.getJsonObject(KEY_PARAMS);
-                return new RpcRequest(
-                        rpcRequestObject.getString(KEY_ID),
-                        rpcRequestObject.getString(KEY_METHOD),
-                        params != null ? params.getMap() : Collections.emptyMap());
+                if (! (rpcRequestObject.getValue(KEY_PARAMS) instanceof JsonArray)) {
+                    JsonObject params = rpcRequestObject.getJsonObject(KEY_PARAMS);
+                    return new RpcRequest(
+                            id,
+                            rpcRequestObject.getString(KEY_METHOD),
+                            params != null ? params.getMap() : Collections.emptyMap());
+                } else {
+                    throw new RpcException(getSequentialParametersNotSupportedRpcResponse(id));
+                }
             } else {
-                throw new IllegalArgumentException(MessageFormat.format("Invalid or unsupported JSON-RPC payload: {0}. Only 2.0 is supported.", rpcRequestObject.getString("jsonrpc")));
+                throw new RpcException(getInvalidPayloadRpcResponse(version, id));
             }
         } else {
             return null;
@@ -108,6 +121,11 @@ public class JsonRpcContext extends RpcContext {
                 ctx.response().setStatusCode(200).end(); // Notification, no need to return anything
             }
         }
+
+        @Override
+        public String toString() {
+            return result.toString();
+        }
     }
 
     @Override
@@ -130,16 +148,40 @@ public class JsonRpcContext extends RpcContext {
      * @return RpcResponse representing the "method not found" error
      */
     public RpcResponse getNoMethodRpcResponse() {
-        JsonObject response = new JsonObject();
-        response.put(KEY_VERSION, VERSION);
-        response.put(KEY_ID, rpcRequest.getId());
+        return getErrorRpcResponse(-32601,
+                "Method not found: " + rpcRequest.getMethodName(),
+                rpcRequest.getId());
+    }
 
-        JsonObject error = new JsonObject();
-        error.put(KEY_CODE, -32601);
-        error.put(KEY_MESSAGE, "Method not found: " + rpcRequest.getMethodName());
-        response.put(KEY_ERROR, error);
+    /**
+     * Creates a JSON-RPC response indicating that sequential parameters are not supported.
+     * This response includes an error object with code -32602 and a message advising to use named parameters instead.
+     *
+     * @return RpcResponse representing the "sequential parameters not supported" error
+     */
+    public RpcResponse getSequentialParametersNotSupportedRpcResponse(String id) {
+        return getErrorRpcResponse(-32602,
+                "Sequential parameters are not supported. Use named parameters instead.",
+                id);
+    }
 
-        return new JsonRpcResponse(response);
+    public RpcResponse getInvalidRequestRpcResponse(Exception e) {
+        return getErrorRpcResponse(-32600,
+                "Invalid request. " + e.getMessage(),
+                "");
+    }
+
+    /**
+     * Creates a JSON-RPC response indicating that the payload is invalid or unsupported.
+     * This response includes an error object with code -32600 and a message indicating the unsupported version.
+     *
+     * @param version The version of the JSON-RPC payload that is invalid or unsupported
+     * @return RpcResponse representing the "invalid or unsupported payload" error
+     */
+    public RpcResponse getInvalidPayloadRpcResponse(String version, String id) {
+        return getErrorRpcResponse(-32600,
+                MessageFormat.format("Invalid or unsupported JSON-RPC payload: {0}. Only 2.0 is supported.", version),
+                id);
     }
 
     /**
@@ -150,17 +192,22 @@ public class JsonRpcContext extends RpcContext {
      * @return RpcResponse representing the error response
      */
     public RpcResponse getErrorMethodInvocationRpcResponse(Exception e) {
-        JsonObject response = new JsonObject();
-        response.put(KEY_VERSION, VERSION);
-        response.put(KEY_ID, rpcRequest.getId());
-
-        JsonObject error = new JsonObject();
-        error.put("code", -32000);
         String message = e.getMessage();
         if (e instanceof InvocationTargetException ie)
             message = ie.getTargetException().getMessage();
-        error.put("message", "Error during method invocation: " + rpcRequest.getMethodName() + " - " + message);
-        response.put("error", error);
+
+        return getErrorRpcResponse(-32000, message, rpcRequest.getId());
+    }
+
+    public RpcResponse getErrorRpcResponse(int code, String message, String id) {
+        JsonObject response = new JsonObject();
+        response.put(KEY_VERSION, VERSION);
+        response.put(KEY_ID, id);
+
+        JsonObject error = new JsonObject();
+        error.put(KEY_CODE, code);
+        error.put(KEY_MESSAGE, message);
+        response.put(KEY_ERROR, error);
 
         return new JsonRpcResponse(response);
     }

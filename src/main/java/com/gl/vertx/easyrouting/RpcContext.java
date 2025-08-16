@@ -31,6 +31,8 @@ import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,8 +41,8 @@ import static com.gl.vertx.easyrouting.Result.CONTENT_TYPE;
 
 public abstract class RpcContext {
     protected RpcRequest rpcRequest;
-    protected String contentType;
-    protected RpcType rpcType;
+    protected final String contentType;
+    protected final RpcType rpcType;
 
     public RpcContext(RpcRequest aRpcRequest, String aContentType, RpcType rpcType) {
         this.rpcRequest = Objects.requireNonNull(aRpcRequest);
@@ -63,9 +65,16 @@ public abstract class RpcContext {
         return ctx.get(KEY_RPC_CONTEXT);
     }
 
-    public static RpcContext createRpcContext(RoutingContext ctx, RpcType rpcType) {
-        if (Objects.requireNonNull(rpcType) == RpcType.JsonRpc)
-            return new JsonRpcContext(ctx.body().asJsonObject());
+    public static String getRpcMethodName(RoutingContext ctx) {
+        RpcContext rpcContext = getRpcContext(ctx);
+        if (rpcContext != null && rpcContext.getRpcRequest() != null)
+            return rpcContext.getRpcRequest().getMethodName();
+        return null;
+    }
+
+    public static RpcContext createRpcContext(RoutingContext ctx, RpcType rpcType) throws RpcException {
+        if (Objects.requireNonNull(rpcType) == RpcType.JsonRpc && ctx.body() != null && !ctx.body().asString().isEmpty())
+            return new JsonRpcContext(ctx.body());
 
         throw new IllegalArgumentException("Unsupported RPC type: " + rpcType);
     }
@@ -120,7 +129,52 @@ public abstract class RpcContext {
         }
     }
 
-    public static interface RpcResponse {
+    public interface RpcResponse {
         void handle(RoutingContext ctx);
+    }
+
+    /**
+     * Checks if the given method can be exported as an RPC method.
+     * A method is considered exportable if it is public and not static.
+     *
+     * @param method the method to check
+     * @return true if the method can be exported, false otherwise
+     */
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
+    public static boolean canExportMethod(Method method) {
+        int mods = method.getModifiers();
+        return Modifier.isPublic(mods) && ! Modifier.isStatic(mods);
+    }
+
+    public static class RpcException extends Exception {
+        /**
+         * Exception class representing an error that occurred during RPC processing.
+         * This exception encapsulates an {@code RpcResponse} that can be used to form
+         * a response can be sent back to the client.
+         */
+        private final RpcResponse response;
+
+        /**
+         * Constructs a new {@code RpcException} with the specified {@code RpcResponse}.
+         *
+         * @param response the RpcResponse to be sent back to the client
+         */
+        public RpcException(RpcResponse response) {
+            this.response = response;
+        }
+
+        /**
+         * Retrieves the {@code RpcResponse} associated with this exception.
+         *
+         * @return the RpcResponse to be sent back to the client
+         */
+        public RpcResponse getRpcResponse() {
+            return response;
+        }
+
+        @Override
+        public String getMessage() {
+            return response.toString();
+        }
     }
 }

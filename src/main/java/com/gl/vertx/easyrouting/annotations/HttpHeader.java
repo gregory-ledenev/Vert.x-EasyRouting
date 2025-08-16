@@ -28,15 +28,18 @@ package com.gl.vertx.easyrouting.annotations;
 
 import java.lang.annotation.*;
 
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.METHOD)
-@Repeatable(HttpHeaders.class)
 /**
  * Annotation to specify a single HTTP header that should be included in the response.
  * Can be used multiple times on the same method due to @Repeatable annotation.
- *
- * @return a String representing the header in "name: value" format
  */
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)
+@Repeatable(HttpHeaders.class)
 public @interface HttpHeader {
+    /**
+     * Specifies the name of the HTTP header.
+     *
+     * @return the name of the HTTP header
+     */
     String value();
 }

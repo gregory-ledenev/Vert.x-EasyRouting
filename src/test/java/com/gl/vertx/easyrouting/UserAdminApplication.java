@@ -110,6 +110,7 @@ record User(String id, String name, String email) {
     }
 }
 
+@SuppressWarnings("SameReturnValue")
 class UserService {
     private final LinkedHashMap<String, User> users = new LinkedHashMap<>();
 

@@ -237,6 +237,7 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder {
      * @param port              the port number on which to start the server
      * @param host              the hostname or IP address to which the server will bind (e.g., "localhost" or "0.0.0.0")
      */
+    @SuppressWarnings("UnusedReturnValue")
     public <T extends Application> T start(int port, String host) {
         Objects.requireNonNull(host);
 

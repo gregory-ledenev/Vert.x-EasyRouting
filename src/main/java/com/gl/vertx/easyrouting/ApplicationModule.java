@@ -85,6 +85,7 @@ public abstract class ApplicationModule<T extends Application> implements EasyRo
      * Called when the module is started and registered with an application.
      * Sets up the module with a reference to the parent application instance.
      */
+    @SuppressWarnings("EmptyMethod")
     public void started() {
     }
 
@@ -92,6 +93,7 @@ public abstract class ApplicationModule<T extends Application> implements EasyRo
      * Called when the module is being stopped and unregistered from the application.
      * Cleans up the module's reference to the parent application.
      */
+    @SuppressWarnings("EmptyMethod")
     public void stopped() {
     }
 

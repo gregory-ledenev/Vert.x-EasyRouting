@@ -167,7 +167,7 @@ public class Result<T> {
                 String uploadedFileName = fileUpload.uploadedFileName();
                 String fileName = fileUpload.fileName();
                 if (! fileName.isEmpty()) {
-                    boolean saved = false;
+                    boolean saved;
                     try {
                         saved = fileSaver.apply(Path.of(uploadedFileName), fileName);
                     } catch (Exception e) {
