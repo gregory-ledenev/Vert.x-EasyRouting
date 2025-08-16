@@ -40,14 +40,17 @@ import static com.gl.vertx.easyrouting.Result.CONTENT_TYPE;
 public abstract class RpcContext {
     protected RpcRequest rpcRequest;
     protected String contentType;
+    protected RpcType rpcType;
 
-    public RpcContext(RpcRequest aRpcRequest, String aContentType) {
+    public RpcContext(RpcRequest aRpcRequest, String aContentType, RpcType rpcType) {
         this.rpcRequest = Objects.requireNonNull(aRpcRequest);
         this.contentType = Objects.requireNonNull(aContentType);
+        this.rpcType = rpcType;
     }
 
-    public RpcContext(String aContentType) {
-        contentType = aContentType;
+    public RpcContext(String aContentType, RpcType rpcType) {
+        this.contentType = Objects.requireNonNull(aContentType);
+        this.rpcType = rpcType;
     }
 
     public String getContentType() {
@@ -60,6 +63,12 @@ public abstract class RpcContext {
         return ctx.get(KEY_RPC_CONTEXT);
     }
 
+    public static RpcContext createRpcContext(RoutingContext ctx, RpcType rpcType) {
+        if (Objects.requireNonNull(rpcType) == RpcType.JsonRpc)
+            return new JsonRpcContext(ctx.body().asJsonObject());
+
+        throw new IllegalArgumentException("Unsupported RPC type: " + rpcType);
+    }
     public static void setRpcContext(RoutingContext ctx, RpcContext rpcContext) {
         ctx.response().putHeader(CONTENT_TYPE, rpcContext.getContentType());
         ctx.put(KEY_RPC_CONTEXT, rpcContext);
@@ -112,6 +121,6 @@ public abstract class RpcContext {
     }
 
     public static interface RpcResponse {
-        Object encode();
+        void handle(RoutingContext ctx);
     }
 }

@@ -1,11 +1,12 @@
 package com.gl.vertx.easyrouting;
 
+import com.gl.vertx.easyrouting.annotations.*;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.UUID;
 
-import static com.gl.vertx.easyrouting.HttpMethods.*;
+import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 
 
 /**

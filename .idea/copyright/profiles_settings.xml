@@ -1,7 +1,3 @@
 <component name="CopyrightManager">
-  <settings default="Ny Copyright">
-    <module2copyright>
-      <element module="Project Files" copyright="Ny Copyright" />
-    </module2copyright>
-  </settings>
+  <settings default="Ny Copyright" />
 </component>

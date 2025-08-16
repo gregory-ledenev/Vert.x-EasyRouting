@@ -1,5 +1,6 @@
 package com.gl.vertx.easyrouting;
 
+import com.gl.vertx.easyrouting.annotations.*;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,7 +14,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import static com.gl.vertx.easyrouting.HttpMethods.*;
+import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 import static com.gl.vertx.easyrouting.TestApplication.User.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -23,34 +24,41 @@ public class TestApplication {
         com.gl.vertx.easyrouting.User.clearUserIDCounter();
     }
 
-    @JsonRpc
+    @Description("Test service for JSON-RPC methods")
+    @Rpc(path = "/api/jsonrpc/test" , provideScheme = true)
     static class JsonRpcTestApplicationModule extends ApplicationModule<TestApplicationImpl> {
-        @POST("/api/jsonrpc/test/*")
-        public void handleJsonRpcRequest(RoutingContext ctx) {
-            super.handleJsonRpcRequest(ctx);
+
+        @Description("""
+                     Multiplies two integers with an optional third integer
+                     
+                     @param a the first integer
+                     @param b the second integer""")
+        public int multiply(@Param("a") int a , @Param("b") int b, @OptionalParam(value = "c", defaultValue = "1") int c) {
+            return a * b * c;
         }
 
-        public int multiply(@Param("a") int a , @Param("b") int b) {
-            return a * b;
-        }
-
-        String multiplyAsString(@Param("a") int a , @Param("b") int b) {
+        @Description("Multiplies two integers and returns the result as a string")
+        public String multiplyAsString(@Param("a") int a , @Param("b") int b) {
             return String.valueOf(a * b);
         }
 
-        int[] intArray(@Param("a") int a , @Param("b") int b) {
+        @Description("Returns an array of two integers")
+        public int[] intArray(@Param("a") int a , @Param("b") int b) {
             return new int[]{a, b};
         }
 
-        List<Integer> intList(@Param("a") int a , @Param("b") int b) {
+        @Description("Returns a list of two integers")
+        public List<Integer> intList(@Param("a") int a , @Param("b") int b) {
             return List.of(a, b);
         }
 
-        Map<String, Integer> intMap(@Param("a") int a , @Param("b") int b) {
+        @Description("Returns a map with two integer values")
+        public Map<String, Integer> intMap(@Param("a") int a , @Param("b") int b) {
             return Map.of("a", a, "b", b);
         }
 
-        void voidMethod(@Param("a") int a , @Param("b") int b) {
+        @Description("A void method that does nothing")
+        public void voidMethod(@Param("a") int a , @Param("b") int b) {
         }
 
         public JsonRpcTestApplicationModule(String... protectedRoutes) {
@@ -58,31 +66,26 @@ public class TestApplication {
         }
     }
 
-    @JsonRpc
+    @Rpc(path = "/api/users/jsonrpc")
     static class JsonRpcUserApplicationModule extends ApplicationModule<TestApplicationImpl> {
-        List<com.gl.vertx.easyrouting.User> getUsers() {
+        public List<com.gl.vertx.easyrouting.User> getUsers() {
             return application.userService.getUsers();
         }
 
-        com.gl.vertx.easyrouting.User getUser(@Param("id") String id) {
+        public com.gl.vertx.easyrouting.User getUser(@Param("id") String id) {
             return application.userService.getUser(id);
         }
 
-        com.gl.vertx.easyrouting.User addUser(@BodyParam("user") com.gl.vertx.easyrouting.User user) {
+        public com.gl.vertx.easyrouting.User addUser(@BodyParam("user") com.gl.vertx.easyrouting.User user) {
             return application.userService.addUser(user);
         }
 
-        com.gl.vertx.easyrouting.User updateUser(@Param("id") String id, @Param("user") com.gl.vertx.easyrouting.User user) {
+        public com.gl.vertx.easyrouting.User updateUser(@Param("id") String id, @Param("user") com.gl.vertx.easyrouting.User user) {
             return application.userService.updateUser(user, id);
         }
 
-        boolean deleteUser(@Param("id") String id) {
+        public boolean deleteUser(@Param("id") String id) {
             return application.userService.deleteUser(id);
-        }
-
-        @POST("/api/users/jsonrpc/*")
-        public void handleJsonRpcRequest(RoutingContext ctx) {
-            super.handleJsonRpcRequest(ctx);
         }
 
         public JsonRpcUserApplicationModule(String... protectedRoutes) {
@@ -121,13 +124,13 @@ public class TestApplication {
         }
 
         @GET(value = "/*")
-        String hello() {
+        public String hello() {
             return "Hello from TestApplication!";
         }
 
         @Blocking
         @GET(value = "/blockingHello")
-        String blockingHello() {
+        public String blockingHello() {
             try {
                 Thread.sleep(5000); // simulate a long-running task
             } catch (InterruptedException e) {
@@ -138,39 +141,39 @@ public class TestApplication {
 
         @Form
         @POST(value = "/login")
-        String login(@Param("user") String user, @Param("password") String password, @OptionalParam(value = "role") String role) {
+        public String login(@Param("user") String user, @Param("password") String password, @OptionalParam(value = "role") String role) {
             return JWTUtil.generateToken(getVertx(), user, Arrays.asList(role.split(",")), JWT_PASSWORD);
         }
 
         @Form
         @POST(value = "/loginNotAnnotated")
-        String loginNotAnnotated(String user, String password, String role) {
+        public String loginNotAnnotated(String user, String password, String role) {
             return JWTUtil.generateToken(getVertx(), user, Arrays.asList(role.split(",")), JWT_PASSWORD);
         }
 
         @HandlesStatusCode(401)
         @GET(value = "/loginForm")
-        String loginForm(@OptionalParam("redirect") String redirect) {
+        public String loginForm(@OptionalParam("redirect") String redirect) {
             return "Login Form - redirect back to: " + redirect;
         }
 
         @GET(value = "/api/*")
-        String api() {
+        public String api() {
             return "Hello protected API!";
         }
 
         @GET(value = "/api/user/*", requiredRoles = {"user", "admin"})
-        String apiUser() {
+        public String apiUser() {
             return "Hello protected API (user)!";
         }
 
         @GET(value = "/api/admin/*", requiredRoles = {"admin"})
-        String apiAdmin() {
+        public String apiAdmin() {
             return "Hello protected API (admin)!";
         }
 
         @GET(value = "/concatenate")
-        String concatenate(@Param("str1") String str1, @Param("str2") String str2, @OptionalParam("str3") String str3) {
+        public String concatenate(@Param("str1") String str1, @Param("str2") String str2, @OptionalParam("str3") String str3) {
             return str1 + str2 + (str3 != null && str3.isEmpty() ? "" : str3);
         }
 
@@ -178,31 +181,31 @@ public class TestApplication {
         @HttpHeader("header1: Value1")
         @HttpHeader("header2: Value2")
         @GET("/multipleHeaders")
-        String getMultipleHeaders() {
+        public String getMultipleHeaders() {
             return "Multiple Headers";
         }
 
         @GET("/testCustomHandler")
-        Result<String> testCustomHandler() {
+        public Result<String> testCustomHandler() {
             return new Result<>("Hello").handler((result, ctx) ->
                     result.setResult(result.getResult() + " World!"));
         }
 
         @ContentType("text/user-string")
         @GET("/testConversionTo")
-        User testConversionTo() {
+        public User testConversionTo() {
             return new User("John Doe", "john.doe@gmail.com");
         }
 
         @ContentType("text/user-string")
         @POST("/testConversionFrom")
-        User testConversionFrom(@BodyParam("user") User user) {
+        public User testConversionFrom(@BodyParam("user") User user) {
             return user;
         }
 
         @DecomposeBody
         @POST("/composeUser")
-        User composeUser(String name, String email) {
+        public User composeUser(String name, String email) {
             return new User(name, email);
         }
 
@@ -500,6 +503,65 @@ public class TestApplication {
         app.handleCompletionHandlerFailure();
     }
 
+    @Test
+    void testJsonNotification() throws Throwable {
+        Application app = new TestApplicationImpl().
+                module(new JsonRpcTestApplicationModule()).
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
+                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {"jsonrpc": "2.0", "method": "voidMethod", "params": {"a":2, "b":3}}"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("", response.body());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testJsonScheme() throws Throwable {
+        Application app = new TestApplicationImpl().
+                module(new JsonRpcTestApplicationModule()).
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
+                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
+                            .GET()
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+//                        assertEquals("", response.body());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
     @Test
     void testJsonMultiplyAsString() throws Throwable {
         Application app = new TestApplicationImpl().

@@ -26,9 +26,7 @@
 
 package com.gl.vertx.easyrouting;
 
-import io.vertx.ext.web.RoutingContext;
-
-import java.util.Objects;
+import io.vertx.ext.web.Router;
 
 /**
  * Base class for application modules that can be registered with an {@link Application}.
@@ -54,11 +52,6 @@ public abstract class ApplicationModule<T extends Application> implements EasyRo
     void setApplication(Application application) {
         //noinspection unchecked
         this.application = (T) application;
-        if (application != null && getClass().getAnnotation(JsonRpc.class) != null)
-            routingContextHandler = new EasyRouting.RoutingContextHandler(null, this);
-        else
-            routingContextHandler = null;
-
     }
 
     /**
@@ -102,16 +95,14 @@ public abstract class ApplicationModule<T extends Application> implements EasyRo
     public void stopped() {
     }
 
-    private EasyRouting.RoutingContextHandler routingContextHandler;
-
     /**
-     * Handles JSON-RPC requests by delegating to the methods defined in the module. Subclasses can override this
-     * method to provide @POST annotation having the endpoint path
+     * Sets up the controller with the specified router, registering all annotated methods
+     * as endpoints based on their annotations.
      *
-     * @param ctx The RoutingContext containing the request and response
+     * @param router The Vert.x Router to register the controller with
      */
-    public void handleJsonRpcRequest(RoutingContext ctx) {
-        routingContextHandler.handle(ctx, (name, parameterClasses) ->
-                !(name.equals("handleJsonRpcRequest") && parameterClasses.length == 1 && parameterClasses[0] == RoutingContext.class));
+    public void setupController(Router router) {
+        EasyRouting.setupController(router, this);
+        new RpcController(this).setupController(router);
     }
 }

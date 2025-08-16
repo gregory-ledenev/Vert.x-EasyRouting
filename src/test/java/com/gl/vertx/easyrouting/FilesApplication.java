@@ -1,5 +1,8 @@
 package com.gl.vertx.easyrouting;
 
+import com.gl.vertx.easyrouting.annotations.HttpMethods;
+import com.gl.vertx.easyrouting.annotations.Param;
+import com.gl.vertx.easyrouting.annotations.UploadsParam;
 import io.vertx.ext.web.FileUpload;
 
 import java.io.File;

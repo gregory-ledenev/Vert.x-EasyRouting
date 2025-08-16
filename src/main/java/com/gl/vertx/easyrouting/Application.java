@@ -105,7 +105,7 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder {
             }
 
             for (ApplicationModule<?> applicationModule : applicationModules)
-                EasyRouting.setupController(router, applicationModule);
+                applicationModule.setupController(router);
 
             EasyRouting.setupController(router, Application.this);
 
@@ -335,12 +335,12 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder {
     }
 
     public void started() {
-        for (ApplicationModule applicationModule : applicationModules)
+        for (ApplicationModule<?> applicationModule : applicationModules)
             applicationModule.started();
     }
 
     public void stopped() {
-        for (ApplicationModule applicationModule : applicationModules)
+        for (ApplicationModule<?> applicationModule : applicationModules)
             applicationModule.stopped();
     }
 

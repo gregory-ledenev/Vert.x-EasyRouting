@@ -147,40 +147,68 @@ public static void main(String[] args) {
 ```
 ### JSON-RPC Application Module
 
-EasyRoting provides a special `JsonRpcApplicationModule` class that you can extend to create JSON-RPC 2.0 compliant
-application modules. You can then register these modules with your Application using the `Application.module(...)` method. The
-`JsonRpcApplicationModule` class automatically handles JSON-RPC request parsing, response formatting, and error handling, allowing you to focus on implementing the actual method logic.
+EasyRoting provides a special handling for the `ApplicationModule` class so you
+can use it to create JSON-RPC 2.0 compliant application modules. the only thing
+you can add is a `@Rpc` annotation. Properly annotated `ApplicationModule` class
+automatically handles JSON-RPC request parsing, response formatting, and error
+handling, allowing you to focus on implementing the actual method logic.
 
 To let your module be recognized as a JSON-RPC module, you need:
 
 1. Subclass the `ApplicationModule` class.
-2. Annotate the class with `@JsonRpc` to indicate that it is a JSON-RPC module.
-3. Override the `handleJsonRpcRequest()` method to provide a `@POST` annotation
-   with the endpoint path.
-4. Implement all required methods that can be accessible via JSON-RPC. Note:
+2. Annotate the class with `@JsonRpc` with an endpoint path to indicate that it is 
+   a JSON-RPC module.
+3. Implement all required methods that can be accessible via JSON-RPC. Note:
    that methods don't require `@POST` annotations as the endpoint for entire 
-   application module is clearly defined by a `@POST` of `handleJsonRpcRequest()` 
-   method.
+   application module is clearly defined by the `@Rpc` annotation.
+4. Optionally use `@Description` annotations to add a description for the module and
+   the methods to make a generated scheme be self-descriptive.
+
 ```java
-@JsonRpc
+import com.gl.vertx.easyrouting.annotations.Description;
+
+@JsonRpc("/api/jsonrpc/test")
+@Description("Sample service that provides simple test operations")
 public class JsonRpcTestApplicationModule extends ApplicationModule<TestApplicationImpl> {
-
-    // Handle JSON-RPC requests at the specified endpoint
-    @POST("/api/jsonrpc/test/*")
-    public void handleJsonRpcRequest(RoutingContext ctx) {
-        super.handleJsonRpcRequest(ctx);
-    }
-
-    // Example JSON-RPC method
-    public int multiply(@Param("a") int a , @Param("b") int b) {
+    @Description("Multiplies two integers with an optional third integer")
+    public int multiply(@Param("a") int a, @Param("b") int b) {
         return a * b;
     }
 }
 ```
+
+You can request a scheme for the JSON-RPC module by sending a simple `GET`
+request to the module's path. By default, schema discovery is turned off for 
+security reasons, but you can enable it by specifying the `provideScheme = true` 
+for an `@Rpc` annotation
+```java
+@Rpc(path = "/api/jsonrpc/test" , provideScheme = true)
+```
+Sample scheme output can be:
+```java
+java.lang.String;
+java.util.List;
+java.util.Map;
+
+/**
+ * Sample service that provides simple test operations
+ */
+public interface Service {
+    /**
+     * Multiplies two integers with an optional third integer
+     */
+    int multiply(int a, int b, int c);
+    int[] intArray(int a, int b);
+    List intList(int a, int b);
+    Map intMap(int a, int b);
+    void voidMethod(int a, int b);
+    String multiplyAsString(int a, int b);
+}
+```
+
 The following are limitations:
 - Batch calling is not supported.
 - Positional parameters are not supported
-- Response to Notifications will be provided
 
 ## Using With Vert.x Router
 

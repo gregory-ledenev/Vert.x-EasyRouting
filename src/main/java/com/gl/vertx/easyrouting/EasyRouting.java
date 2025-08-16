@@ -25,6 +25,7 @@ SOFTWARE.
 package com.gl.vertx.easyrouting;
 
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.gl.vertx.easyrouting.annotations.*;
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
 import io.vertx.core.Vertx;
@@ -49,9 +50,10 @@ import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.util.*;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.gl.vertx.easyrouting.HttpMethods.*;
+import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 import static com.gl.vertx.easyrouting.JWTUtil.ROLES;
 import static com.gl.vertx.easyrouting.Result.CONTENT_TYPE;
 import static com.gl.vertx.easyrouting.Result.CT_APPLICATION_JSON;
@@ -85,7 +87,6 @@ public class EasyRouting {
     public static void setupController(Router router, Object target) {
         Objects.requireNonNull(router);
         Objects.requireNonNull(target);
-
         setupController(router, GET.class, target);
         setupController(router, POST.class, target);
         setupController(router, DELETE.class, target);
@@ -248,6 +249,13 @@ public class EasyRouting {
         return count;
     }
 
+    private static void setupRpcRequestsHandler(Router router, Object target) {
+        Rpc rpc = target.getClass().getAnnotation(Rpc.class);
+        if (rpc != null) {
+            router.post(rpc.path()).handler(createHandler(rpc, target));
+        }
+    }
+
     /**
      * Sets up HTTP request handlers for a specific HTTP method annotation type.
      *
@@ -263,8 +271,8 @@ public class EasyRouting {
                 Annotation annotation = method.getAnnotation(annotationClass);
                 if (annotation != null) {
                     logger.info("Setting up method for annotation: " + annotation);
-                    String annotationValue = getPathForAnnotation(annotation);
-                    if (annotationValue != null) {
+                    String path = getPathForAnnotation(annotation);
+                    if (path != null) {
                         // skip already installed handlers for the same path. the annotation contains both path and method, so it is enough.
                         String installedHandlerKey = annotation.toString();
                         if (installedHandlers.contains(installedHandlerKey))
@@ -272,15 +280,15 @@ public class EasyRouting {
                         installedHandlers.add(installedHandlerKey);
 
                         if (annotationClass == GET.class)
-                            router.get(annotationValue).handler(createHandler(annotation, target));
+                            router.get(path).handler(createHandler(annotation, target));
                         else if (annotationClass == POST.class)
-                            router.post(annotationValue).handler(createHandler(annotation, target));
+                            router.post(path).handler(createHandler(annotation, target));
                         else if (annotationClass == DELETE.class)
-                            router.delete(annotationValue).handler(createHandler(annotation, target));
+                            router.delete(path).handler(createHandler(annotation, target));
                         else if (annotationClass == PUT.class)
-                            router.put(annotationValue).handler(createHandler(annotation, target));
+                            router.put(path).handler(createHandler(annotation, target));
                         else if (annotationClass == PATCH.class)
-                            router.patch(annotationValue).handler(createHandler(annotation, target));
+                            router.patch(path).handler(createHandler(annotation, target));
                     }
                 }
             }
@@ -310,16 +318,6 @@ public class EasyRouting {
         return new RoutingContextHandler(annotation, target);
     }
 
-    private static RpcContext rpcContext(RoutingContext ctx, Object target) {
-        RpcContext result = null;
-
-        if (target.getClass().getAnnotation(JsonRpc.class) != null) {
-            result = new JsonRpcContext(ctx.body().asJsonObject());
-        }
-
-        return result;
-    }
-
     private static final String KEY_RPC_REQUEST = "rpcRequest";
 
     protected static class RoutingContextHandler implements Handler<RoutingContext> {
@@ -330,47 +328,55 @@ public class EasyRouting {
         public RoutingContextHandler(Annotation annotation, Object target) {
             this.annotation = annotation;
             this.target = target;
+            this.annotatedConverters = setupAnnotatedConverters(target);
+        }
 
-            if (target instanceof AnnotatedConvertersHolder annotatedConvertersHolder) {
-                this.annotatedConverters = annotatedConvertersHolder.getAnnotatedConverters();
-            } else {
-                this.annotatedConverters = new AnnotatedConverters();
-                this.annotatedConverters.collectConverters(target);
+        private void obtainRpcContext(RoutingContext ctx, Object target) {
+            if (annotation != null)
+                return;
+
+            RpcContext result = RpcContext.getRpcContext(ctx);
+
+            if (result == null) {
+                Rpc annotation = target.getClass().getAnnotation(Rpc.class);
+                if (annotation != null) {
+                    result = RpcContext.createRpcContext(ctx, annotation.rpcType());
+                    RpcContext.setRpcContext(ctx, result);
+                }
             }
         }
 
-        private void obtainRpcContext(RoutingContext ctx) {
-            RpcContext rpcContext = rpcContext(ctx, target);
-            if (rpcContext != null)
-                RpcContext.setRpcContext(ctx, rpcContext);
+        private AnnotatedConverters setupAnnotatedConverters(Object target) {
+            final AnnotatedConverters annotatedConverters;
+            if (target instanceof AnnotatedConvertersHolder annotatedConvertersHolder) {
+                annotatedConverters = annotatedConvertersHolder.getAnnotatedConverters();
+            } else {
+                annotatedConverters = new AnnotatedConverters();
+                annotatedConverters.collectConverters(target);
+            }
+            return annotatedConverters;
         }
 
-        @Override
         public void handle(RoutingContext ctx) {
-            handle(ctx, (aS, aClasses) -> true);
-        }
-
-        public void handle(RoutingContext ctx, BiFunction<String, Class<?>[], Boolean> methodFilter) {
 
             try {
-                obtainRpcContext(ctx);
+                obtainRpcContext(ctx, target);
 
-                MethodResult handlerMethod = getMethod(ctx, annotation, methodFilter);
-                if (handlerMethod == null) {
+                MethodResult methodResult = getMethod(ctx, annotation);
+                if (methodResult == null) {
                     logger.error("No handler method for: \"" + annotation + "\" and parameters: " + ctx.request().params().names());
                     RpcContext rpcContext = RpcContext.getRpcContext(ctx);
                     if (rpcContext != null) {
-                        ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_JSON).end(rpcContext.getNoMethodRpcResponse().encode().toString());
+                        rpcContext.getNoMethodRpcResponse().handle(ctx);
                     } else {
                         ctx.response().setStatusCode(404).end();
                     }
-                } else if (checkRequiredRoles(ctx, handlerMethod.method)) {
-                    if (handlerMethod.hasBodyParam) {
-                        // Use the already parsed body instead of reading it again
+                } else if (checkRequiredRoles(ctx, methodResult.method)) {
+                    if (methodResult.hasBodyParam) {
                         Buffer bodyBuffer = ctx.getBody();
                         try {
-                            Object[] args = methodParameterValues(ctx, handlerMethod.method(), handlerMethod.parameterNames, handlerMethod.method().getParameterTypes(), ctx.request().params(), bodyBuffer);
-                            invokeHandlerMethod(ctx, handlerMethod, args);
+                            Object[] args = methodParameterValues(ctx, methodResult.method(), methodResult.parameterNames, methodResult.method().getParameterTypes(), ctx.request().params(), bodyBuffer);
+                            invokeHandlerMethod(ctx, methodResult, args);
                         } catch (Exception e) {
                             ctx.response()
                                     .setStatusCode(500)
@@ -379,8 +385,8 @@ public class EasyRouting {
                                     error("Error processing request body", e);
                         }
                     } else {
-                        Object[] args = methodParameterValues(ctx, handlerMethod.method(), handlerMethod.parameterNames, handlerMethod.method().getParameterTypes(), ctx.request().params(), null);
-                        invokeHandlerMethod(ctx, handlerMethod, args);
+                        Object[] args = methodParameterValues(ctx, methodResult.method(), methodResult.parameterNames, methodResult.method().getParameterTypes(), ctx.request().params(), null);
+                        invokeHandlerMethod(ctx, methodResult, args);
                     }
                 } else {
                     throw new HttpException(403, "Access denied"); // exception to let failure handler handle it
@@ -424,7 +430,7 @@ public class EasyRouting {
             } catch (Exception e) {
                 RpcContext rpcContext = RpcContext.getRpcContext(ctx);
                 if (rpcContext != null) {
-                    ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_JSON).end(rpcContext.getErrorMethodInvocationRpcResponse(e).encode().toString());
+                    rpcContext.getErrorMethodInvocationRpcResponse(e).handle(ctx);
                 } else {
                     throw new RuntimeException(e);
                 }
@@ -443,12 +449,8 @@ public class EasyRouting {
 
         private static boolean warnedAboutMissingParameterNames = false;
 
-        private MethodResult getMethod(RoutingContext ctx, Annotation annotation, BiFunction<String, Class<?>[], Boolean> methodFilter) {
-            for (Method method : target.getClass().getDeclaredMethods()) {
-                if (methodFilter.apply(method.getName(), method.getParameterTypes()) && method.getParameterCount() == 1 && method.getParameterTypes()[0].equals(RoutingContext.class)) {
-                    return new MethodResult(method, new String[]{method.getParameters()[0].getName()}, false);
-                }
-            }
+        private MethodResult getMethod(RoutingContext ctx, Annotation annotation) {
+            Method[] declaredMethods = target.getClass().getDeclaredMethods();
 
             MultiMap lowercaseParams = MultiMap.caseInsensitiveMultiMap();
             lowercaseParams.addAll(ctx.request().params());
@@ -468,71 +470,85 @@ public class EasyRouting {
                 }
             }
 
-            for (Method method : target.getClass().getDeclaredMethods()) {
-                if (methodFilter.apply(method.getName(), method.getParameterTypes()) && (methodName != null && ! method.getName().equals(methodName)))
-                    continue; // Skip methods that do not match the JSON-RPC method name
+            for (Method method : declaredMethods) {
+                if (methodName != null && ! method.getName().equals(methodName))
+                    continue;
 
                 Annotation methodAnnotation = annotation != null ? method.getAnnotation(annotation.annotationType()) : null;
                 if (annotation == null || (methodAnnotation != null && methodAnnotation.equals(annotation))) {
-                    List<String> paramNames = new ArrayList<>();
-                    int matchedParamCount = 0;
-                    int optionalParamCount = 0;
-                    int otherParamCount = 0;
-                    boolean hasBodyParam = false;
-                    boolean isFormHandler = method.getAnnotation(Form.class) != null;
-
-                    decomposeJsonBody(ctx, method, lowercaseParams);
-
-                    for (Parameter parameter : method.getParameters()) {
-
-                        if (parameter.getAnnotation(Param.class) != null) {
-                            Param param = parameter.getAnnotation(Param.class);
-                            paramNames.add(param.value());
-                            String lowerCaseParam = param.value().toLowerCase();
-                            if (lowercaseParams.get(lowerCaseParam) != null)
-                                matchedParamCount++;
-                            else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
-                                otherParamCount++;
-                        } else if (parameter.getAnnotation(OptionalParam.class) != null) {
-                            OptionalParam param = parameter.getAnnotation(OptionalParam.class);
-                            paramNames.add(param.value());
-                            matchedParamCount++;
-                            String lowerCaseParam = param.value().toLowerCase();
-                            if (lowercaseParams.get(lowerCaseParam) == null)
-                                optionalParamCount++;
-                            else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
-                                otherParamCount++;
-                        } else if (parameter.getAnnotation(BodyParam.class) != null) {
-                            BodyParam param = parameter.getAnnotation(BodyParam.class);
-                            otherParamCount++;
-                            hasBodyParam = true;
-                            paramNames.add(param.value());
-                        } else if (parameter.getAnnotation(PathParam.class) != null) {
-                            PathParam param = parameter.getAnnotation(PathParam.class);
-                            otherParamCount++;
-                            paramNames.add(param.value());
-                        } else if (parameter.getAnnotation(UploadsParam.class) != null) {
-                            otherParamCount++;
-                            paramNames.add("uploads");
-                        } else {
-                            if (parameter.getName().matches("arg\\d+") && ! warnedAboutMissingParameterNames) {
-                                warnedAboutMissingParameterNames = true;
-                                logger.warn("Parameter names are missing. Either use @Param annotations or compile project with -parameters option");
-                            }
-                            paramNames.add(parameter.getName());
-                            String lowerCaseParam = parameter.getName().toLowerCase();
-                            if (lowercaseParams.get(lowerCaseParam) != null)
-                                matchedParamCount++;
-                            else if (isFormHandler && lowercaseFormAttributes != null && lowercaseFormAttributes.get(lowerCaseParam) != null)
-                                otherParamCount++;
-                        }
-                    }
-
-                    int totalParamCount = matchedParamCount + otherParamCount;
-                    if (method.getParameterCount() == totalParamCount && matchedParamCount == lowercaseParams.size() + optionalParamCount) {
-                        return new MethodResult(method, paramNames.toArray(new String[0]), hasBodyParam);
-                    }
+                    MethodResult methodResult = getMethod(ctx, method, lowercaseParams, lowercaseFormAttributes);
+                    if (methodResult != null)
+                        return methodResult;
                 }
+            }
+
+            return null;
+        }
+
+        private MethodResult getMethod(RoutingContext ctx, Method method, MultiMap params, MultiMap formAttributes) {
+            List<String> paramNames = new ArrayList<>();
+            int matchedParamCount = 0;
+            int optionalParamCount = 0;
+            int otherParamCount = 0;
+            boolean hasBodyParam = false;
+            boolean isFormHandler = method.getAnnotation(Form.class) != null;
+
+            decomposeJsonBody(ctx, method, params);
+
+            for (Parameter parameter : method.getParameters()) {
+
+                if (parameter.getAnnotation(Param.class) != null) {
+                    Param param = parameter.getAnnotation(Param.class);
+                    paramNames.add(param.value());
+                    String lowerCaseParam = param.value().toLowerCase();
+                    if (params.get(lowerCaseParam) != null)
+                        matchedParamCount++;
+                    else if (isFormHandler && formAttributes != null && formAttributes.get(lowerCaseParam) != null)
+                        otherParamCount++;
+                } else if (parameter.getAnnotation(OptionalParam.class) != null) {
+                    OptionalParam param = parameter.getAnnotation(OptionalParam.class);
+                    paramNames.add(param.value());
+                    matchedParamCount++;
+                    String lowerCaseParam = param.value().toLowerCase();
+                    if (params.get(lowerCaseParam) == null)
+                        optionalParamCount++;
+                    else if (isFormHandler && formAttributes != null && formAttributes.get(lowerCaseParam) != null)
+                        otherParamCount++;
+                } else if (parameter.getAnnotation(BodyParam.class) != null) {
+                    BodyParam param = parameter.getAnnotation(BodyParam.class);
+                    otherParamCount++;
+                    hasBodyParam = true;
+                    paramNames.add(param.value());
+                } else if (parameter.getAnnotation(PathParam.class) != null) {
+                    PathParam param = parameter.getAnnotation(PathParam.class);
+                    otherParamCount++;
+                    paramNames.add(param.value());
+                } else if (parameter.getAnnotation(UploadsParam.class) != null) {
+                    otherParamCount++;
+                    paramNames.add("uploads");
+                } else if (parameter.getAnnotation(ContextParam.class) != null) {
+                    ContextParam param = parameter.getAnnotation(ContextParam.class);
+                    otherParamCount++;
+                    paramNames.add(param.value());
+                } else {
+                    if (parameter.getName().matches("arg\\d+") && ! warnedAboutMissingParameterNames) {
+                        warnedAboutMissingParameterNames = true;
+                        logger.warn("Parameter names are missing. Either use @Param annotations or compile project with -parameters option");
+                    }
+                    paramNames.add(parameter.getName());
+                    String lowerCaseParam = parameter.getName().toLowerCase();
+                    if (params.get(lowerCaseParam) != null)
+                        matchedParamCount++;
+                    else if (isFormHandler && formAttributes != null && formAttributes.get(lowerCaseParam) != null)
+                        otherParamCount++;
+                    else if (parameter.getType().equals(RoutingContext.class))
+                        otherParamCount++;
+                }
+            }
+
+            int totalParamCount = matchedParamCount + otherParamCount;
+            if (method.getParameterCount() == totalParamCount && matchedParamCount == params.size() + optionalParamCount) {
+                return new MethodResult(method, paramNames.toArray(new String[0]), hasBodyParam);
             }
             return null;
         }
@@ -567,6 +583,8 @@ public class EasyRouting {
                     result.add(ctx.fileUploads());
                 } else if (parameter.getAnnotation(PathParam.class) != null) {
                     result.add(ctx.normalizedPath());
+                } else if (parameter.getType().equals(RoutingContext.class) && parameter.getAnnotation(ContextParam.class) != null) {
+                    result.add(ctx);
                 } else {
                     OptionalParam optionalParam = parameter.getAnnotation(OptionalParam.class);
                     if (optionalParam != null) {

@@ -29,6 +29,7 @@ package com.gl.vertx.easyrouting;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.web.RoutingContext;
 
 import java.lang.reflect.InvocationTargetException;
 import java.text.MessageFormat;
@@ -65,7 +66,7 @@ public class JsonRpcContext extends RpcContext {
      * @throws IllegalArgumentException if the JSON-RPC version is not supported or if the request is invalid
      */
     public JsonRpcContext(JsonObject jsonRequest) {
-        super(CT_APPLICATION_JSON);
+        super(CT_APPLICATION_JSON, RpcType.JsonRpc);
         rpcRequest = getRpcRequest(jsonRequest);
     }
 
@@ -86,26 +87,38 @@ public class JsonRpcContext extends RpcContext {
     }
 
     static class JsonRpcResponse implements RpcResponse {
-        private final JsonObject result;
+        private JsonObject result;
 
         public JsonRpcResponse(JsonObject result) {
             this.result = result;
         }
 
+        public JsonRpcResponse() {
+        }
+
         @Override
-        public Object encode() {
-            return result.encode();
+        public void handle(RoutingContext ctx) {
+            if (result != null) {
+                ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_JSON);
+                ctx.response().setStatusCode(200);
+                ctx.response().end(result.encode());
+            } else {
+                ctx.response().setStatusCode(200).end(); // Notification, no need to return anything
+            }
         }
     }
 
     @Override
     public RpcResponse getRpcResponse(Object result) {
-        JsonObject response = new JsonObject();
-        response.put(KEY_VERSION, VERSION);
-        response.put(KEY_ID, rpcRequest.getId());
-        response.put(KEY_RESULT, result != null ? convert(result) : null);
+        if (rpcRequest.getId() != null) {
+            JsonObject response = new JsonObject();
+            response.put(KEY_VERSION, VERSION);
+            response.put(KEY_ID, rpcRequest.getId());
+            response.put(KEY_RESULT, result != null ? convert(result) : null);
+            return new JsonRpcResponse(response);
+        }
 
-        return new JsonRpcResponse(response);
+        return new JsonRpcResponse(); // Notification (no ID)
     }
 
     /**

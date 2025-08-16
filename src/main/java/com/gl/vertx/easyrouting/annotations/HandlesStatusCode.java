@@ -24,7 +24,7 @@
  * /
  */
 
-package com.gl.vertx.easyrouting;
+package com.gl.vertx.easyrouting.annotations;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -32,11 +32,15 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Annotation used to mark methods that accept body content decomposed to fields and passed to a method as arguments.
- * Request content type must be set to "application/json" for this annotation to work and body must be a valid JSON
- * object. The method parameters will be automatically populated with the corresponding fields from the JSON object.
+ * Annotation to specify that a method can handle certain HTTP errors with status codes.
+ * This can be used to define which methods can handle certain errors.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
-public @interface DecomposeBody {
+public @interface HandlesStatusCode {
+    /**
+     * The HTTP status code that this method can handle.
+     * @return the HTTP status code
+     */
+    int value();
 }

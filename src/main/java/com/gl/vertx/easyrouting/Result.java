@@ -24,6 +24,9 @@ SOFTWARE.
 
 package com.gl.vertx.easyrouting;
 
+import com.gl.vertx.easyrouting.annotations.FileFromFolder;
+import com.gl.vertx.easyrouting.annotations.FileFromResource;
+import com.gl.vertx.easyrouting.annotations.NotNullResult;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.impl.MimeMapping;
 import io.vertx.core.json.JsonArray;
@@ -503,10 +506,7 @@ public class Result<T> {
             ctx.response().setStatusCode(statusCode);
             RpcContext rpcContext = RpcContext.getRpcContext(ctx);
             if (rpcContext != null) {
-                Object encoded = rpcContext.getRpcResponse(result).encode();
-                ctx.response().
-                        putHeader(CONTENT_TYPE, rpcContext.contentType).
-                        end(encoded.toString());
+                rpcContext.getRpcResponse(result).handle(ctx);
             } else {
                 if (result instanceof Path filePath) {
                     ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_OCTET_STREAM);
