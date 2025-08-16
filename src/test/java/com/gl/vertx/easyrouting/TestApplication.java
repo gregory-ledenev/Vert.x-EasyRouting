@@ -19,6 +19,7 @@ import static com.gl.vertx.easyrouting.TestApplication.User.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TestApplication {
+
     @BeforeEach
     void setUp() {
         com.gl.vertx.easyrouting.User.clearUserIDCounter();
@@ -115,9 +116,13 @@ public class TestApplication {
         }
     }
 
+    @Rpc(path = "/api/jsonrpc/root" , provideScheme = true)
     static class TestApplicationImpl extends Application {
-
         public static final String JWT_PASSWORD = "veeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeery long password";
+
+        public int add(@Param("a") int a , @Param("b") int b, @OptionalParam(value = "c", defaultValue = "0") int c) {
+            return a + b + c;
+        }
 
         @Deprecated
         void doNothing() {
@@ -562,6 +567,7 @@ public class TestApplication {
 
         app.handleCompletionHandlerFailure();
     }
+
     @Test
     void testJsonMultiplyAsString() throws Throwable {
         Application app = new TestApplicationImpl().
@@ -594,6 +600,38 @@ public class TestApplication {
         app.handleCompletionHandlerFailure();
     }
 
+
+    @Test
+    void testJsonRootAdd() throws Throwable {
+        Application app = new TestApplicationImpl().
+                module(new JsonRpcTestApplicationModule()).
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
+                            .uri(URI.create("http://localhost:8080/api/jsonrpc/root"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {"jsonrpc": "2.0", "method": "add", "params": {"a":2, "b":3}, "id": 2}"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("""
+                                     {"jsonrpc":"2.0","id":"2","result":5}""", response.body());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
 
     @Test
     void testJsonRpcGetUsers() throws Throwable {

@@ -108,6 +108,7 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder {
                 applicationModule.setupController(router);
 
             EasyRouting.setupController(router, Application.this);
+            new RpcController(Application.this).setupController(router);
 
             createHttpServer(startPromise, router, port);
 

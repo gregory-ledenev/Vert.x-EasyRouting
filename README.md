@@ -111,7 +111,7 @@ class TestApplication extends Application {
 To run an Application with JWT authentication and SSL:
 
 - use `jwtAuth(jwtSecret, paths)` method to enable JWT authentication with a
-  secret key and path's to protected resources
+  secret key and pa nfvth's to protected resources
 - use `sslWithJks(jksKeyStorePath, jksKeyStorePassword)` or
   `sslWithPem(keyPath, certPath)` method to enable SSL
 - call `start(port)` method with an SSL port number (`443` by default for
@@ -123,53 +123,32 @@ new UserAdminApplication().
     sslWithJks("keystore",<KEYSTORE PASSWORD>).
     start(443);
 ```
-### Application Modules
+### JSON-RPC Support
 
-If your application is small, you can supply all the handler methods inside the Application itself. Otherwise, you can use
-Application Modules to organize and modularize application functionality by grouping related endpoint handlers together.
-You can create an Application Module by extending the `ApplicationModule` class, add all required and properly annotated
-handler methods, and then register the module with the Application using the `Application.module(...)` method. Also,
-you can define all the converters in a dedicated module to keep them in one place and to allow easy reuse.
-```java
-static class UserApplicationModule extends ApplicationModule<UserAdminApplication> {
-    @GET("/api/users")
-    List<User> getUsers() {
-        return application.userService.getUsers();
-    }
-}
-...
-public static void main(String[] args) {
-    new UserAdminApplication(new LoginService(), new UserService()).
-            module(new UserApplicationModule()).
-            jwtAuth(JWT_SECRET, "/api/*").
-            start();
-}
-```
-### JSON-RPC Application Module
+EasyRoting provides an ability to add support of JSON-RPC 2.0 to any `Application` 
+or `ApplicationMoudle`. The only thing you should do - add is a `@Rpc` annotation. 
+Properly annotated `Application` or `ApplicationMoudle` classes automatically handle 
+JSON-RPC request parsing, response formatting, and error handling, allowing you 
+to focus on implementing the actual method logic.
 
-EasyRoting provides a special handling for the `ApplicationModule` class so you
-can use it to create JSON-RPC 2.0 compliant application modules. the only thing
-you can add is a `@Rpc` annotation. Properly annotated `ApplicationModule` class
-automatically handles JSON-RPC request parsing, response formatting, and error
-handling, allowing you to focus on implementing the actual method logic.
+To add support for JSON-RPC, you need:
 
-To let your module be recognized as a JSON-RPC module, you need:
-
-1. Subclass the `ApplicationModule` class.
-2. Annotate the class with `@JsonRpc` with an endpoint path to indicate that it is 
-   a JSON-RPC module.
+1. Subclass the `Application` or `ApplicationMoudle` class.
+2. Annotate the class with `@Rpc` with an endpoint path to indicate that it is
+   an RPC module.
 3. Implement all required methods that can be accessible via JSON-RPC. Note:
-   that methods don't require `@POST` annotations as the endpoint for entire 
+   that methods don't require `@POST` annotations as the endpoint for entire
    application module is clearly defined by the `@Rpc` annotation.
-4. Optionally use `@Description` annotations to add a description for the module and
-   the methods to make a generated scheme be self-descriptive.
+4. Optionally allow scheme discovery and use `@Description` annotations to add a 
+   description for the module and the methods to make a generated scheme be 
+   self-descriptive.
 
 ```java
 import com.gl.vertx.easyrouting.annotations.Description;
 
-@JsonRpc("/api/jsonrpc/test")
+@Rpc("/api/jsonrpc/test")
 @Description("Sample service that provides simple test operations")
-public class JsonRpcTestApplicationModule extends ApplicationModule<TestApplicationImpl> {
+public class JsonRpcTestApplication extends Application {
     @Description("Multiplies two integers with an optional third integer")
     public int multiply(@Param("a") int a, @Param("b") int b) {
         return a * b;
@@ -177,9 +156,9 @@ public class JsonRpcTestApplicationModule extends ApplicationModule<TestApplicat
 }
 ```
 
-You can request a scheme for the JSON-RPC module by sending a simple `GET`
-request to the module's path. By default, schema discovery is turned off for 
-security reasons, but you can enable it by specifying the `provideScheme = true` 
+You can request a scheme for the JSON-RPC app or module by sending a simple `GET`
+request to the endpoint. By default, schema discovery is turned off for
+security reasons, but you can enable it by specifying the `provideScheme = true`
 for an `@Rpc` annotation
 ```java
 @Rpc(path = "/api/jsonrpc/test" , provideScheme = true)
@@ -210,6 +189,28 @@ The following are limitations:
 - Batch calling is not supported.
 - Positional parameters are not supported
 
+### Application Modules
+
+If your application is small, you can supply all the handler methods inside the Application itself. Otherwise, you can use
+Application Modules to organize and modularize application functionality by grouping related endpoint handlers together.
+You can create an Application Module by extending the `ApplicationModule` class, add all required and properly annotated
+handler methods, and then register the module with the Application using the `Application.module(...)` method. Also,
+you can define all the converters in a dedicated module to keep them in one place and to allow easy reuse.
+```java
+static class UserApplicationModule extends ApplicationModule<UserAdminApplication> {
+    @GET("/api/users")
+    List<User> getUsers() {
+        return application.userService.getUsers();
+    }
+}
+...
+public static void main(String[] args) {
+    new UserAdminApplication(new LoginService(), new UserService()).
+            module(new UserApplicationModule()).
+            jwtAuth(JWT_SECRET, "/api/*").
+            start();
+}
+```
 ## Using With Vert.x Router
 
 If `Application` is too simple for your needs, or if you want to use and mix
