@@ -41,6 +41,7 @@ Making JSON-RPC application is as easy as:
 ```java
 @Rpc
 class TestApplication extends Application {
+    
     public String hello() {
         return "Hello from JSON-RPC TestApplication!";
     }
