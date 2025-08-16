@@ -25,9 +25,9 @@ or response things. What do you actually do?
 Here’s literally all it takes:
 
 ```java
-static class HelloWorld extends Application {
+class HelloWorld extends Application {
     @GET("/*")
-    String hello() {
+    public String hello() {
         return "Hello World!";
     }
 
