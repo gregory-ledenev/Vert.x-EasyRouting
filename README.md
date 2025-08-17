@@ -80,12 +80,12 @@ There is a special `Application` class that allows building applications with ea
 for production, prototyping and testing purposes without learning how to create 
 a full Vert.x application:
 
-- Make your class extend `Application`.
-- Write regular methods for your app’s logic, add simple annotations for HTTP
-  verbs and paths.
-- Use Java objects for parameters and return values - no dealing with JSON.
-- Optionally, mark method parameters to bind query/form stuff if you want.
-- Add a main method that creates your applications and calls `start()`.
+1. Make your class extend `Application`.
+2. Write regular methods for your app’s logic, add simple annotations for HTTP
+   verbs and paths.
+3. Use Java objects for parameters and return values - no dealing with JSON.
+4. Optionally, mark method parameters to bind query/form stuff if you want.
+5. Add a main method that creates your applications and calls `start()`.
 
 ```java
 class TestApplication extends Application {
