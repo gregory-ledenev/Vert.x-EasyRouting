@@ -80,6 +80,16 @@ public class TestApplication {
         public void voidMethod(@Param("a") int a , @Param("b") int b) {
         }
 
+        @Blocking
+        public String blockingHello() {
+            try {
+                Thread.sleep(5000); // simulate a long-running task
+            } catch (InterruptedException e) {
+                // do nothing
+            }
+            return "Blocking hello from RPC TestApplication!";
+        }
+
         public JsonRpcTestApplicationModule(String... protectedRoutes) {
             super(protectedRoutes);
         }
@@ -735,6 +745,37 @@ public class TestApplication {
         app.handleCompletionHandlerFailure();
     }
 
+    @Test
+    void testJsonBlockingHello() throws Throwable {
+        Application app = new TestApplicationImpl().
+                module(new JsonRpcTestApplicationModule()).
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
+                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {"jsonrpc": "2.0", "method": "blockingHello", "params": {}, "id": 2}"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("""
+                                     {"jsonrpc":"2.0","id":"2","result":"Blocking hello from RPC TestApplication!"}""", response.body());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
 
     @Test
     void testJsonRootAdd() throws Throwable {

@@ -1,28 +1,24 @@
 # EasyRouting for Vert.x
 
-EasyRouting is an experimental lightweight annotation-based HTTP routing library
-for Vert.x web applications. It simplifies route configuration by allowing
-developers to define routes using annotations and automatically handles
-parameter binding and response processing. While inspired by JAX-RS and
-SpringBoot's annotation-based routing patterns, it maintains a focused, lightweight
-implementation without attempting to replicate SpringBoot's entire feature set.
+EasyRouting is a lightweight, annotation-driven HTTP routing library designed
+to build Vert.x web applications. It simplifies web development by letting you define
+routes with Java annotations—no need to manage complex request or response
+objects.
 
-EasyRouting enables you to build web applications effortlessly, even without
-prior knowledge of Vert.x. To get started, you only need a basic understanding
-of HTTP and general knowledge of Java.
+Inspired by JAX-RS and Spring Boot’s routing style, EasyRouting provides a
+focused, minimal solution without the heaviness of a full framework. It’s ideal
+for developers who want to build web apps quickly using just basic Java and HTTP
+knowledge.
 
-You need to know a bit about HTTP and some basic Java. Although EasyRouting runs
-on Vert.x, you truly don’t have to care about the internals like request objects 
-or response things. What do you actually do?
+Key Highlights:
+- Define routes and configuration using simple annotations on your Java methods.
+- Automatic parameter binding and response handling.
+- Use plain Java objects; no manual JSON serialization needed.
+- Minimal setup; start by extending the `Application` class and calling `start()`.
+- Designed for easy learning with no need to learn Vert.x to get started.
 
-- Make your class extend Application
-- Write regular methods for your app’s logic, add simple annotations for HTTP
-  verbs and paths
-- Use Java objects for parameters and return values — no dealing with JSON
-- Optionally, mark method parameters to bind query/form stuff if you want
-- Add a main method that creates your applications and calls `start()`
-
-Here’s literally all it takes:
+Get started in minutes and build clean, maintainable web apps with less 
+boilerplate code. Here’s literally all it takes:
 
 ```java
 class HelloWorld extends Application {
@@ -74,13 +70,22 @@ simplifies the development process while still providing powerful features.
 - Builtin JWT authentication and role-based authorization
 - Binding methods to HTTP error codes
 - Ready-to use application class for prototyping and testing
-- JSON-RPC 2.0 support
+- No code JSON-RPC 2.0 support
+- Automatic scheme discovery for JSON-RPC applications and modules
+- Easy implementation of custom data converters
 
 ## EasyRouting Application
 
-There is a special Application class that allows building applications with easy
+There is a special `Application` class that allows building applications with easy
 for production, prototyping and testing purposes without learning how to create 
-a full Vert.x application.
+a full Vert.x application:
+
+- Make your class extend `Application`.
+- Write regular methods for your app’s logic, add simple annotations for HTTP
+  verbs and paths.
+- Use Java objects for parameters and return values - no dealing with JSON.
+- Optionally, mark method parameters to bind query/form stuff if you want.
+- Add a main method that creates your applications and calls `start()`.
 
 ```java
 class TestApplication extends Application {
@@ -122,10 +127,10 @@ class TestApplication extends Application {
 ```
 ### JWT and SSL Support
 
-To run an Application with JWT authentication and SSL:
+To run an `Application` with JWT authentication and SSL:
 
 - use `jwtAuth(jwtSecret, paths)` method to enable JWT authentication with a
-  secret key and pa nfvth's to protected resources
+  secret key and path's to protected resources
 - use `sslWithJks(jksKeyStorePath, jksKeyStorePassword)` or
   `sslWithPem(keyPath, certPath)` method to enable SSL
 - call `start(port)` method with an SSL port number `443` by default for
@@ -140,7 +145,7 @@ new UserAdminApplication().
 ### JSON-RPC Support
 
 EasyRoting provides an ability to add support of JSON-RPC 2.0 to any `Application` 
-or `ApplicationMoudle`. The only thing you should do - add is a `@Rpc` annotation. 
+or `ApplicationMoudle`. The only thing you should do - add a `@Rpc` annotation. 
 Properly annotated `Application` or `ApplicationMoudle` classes automatically handle 
 JSON-RPC request parsing, response formatting, and error handling, allowing you 
 to focus on implementing the actual method logic.
