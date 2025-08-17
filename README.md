@@ -573,6 +573,10 @@ public static User convertUserFromText(String text) {
 }
 ```
 
+NOTE: if you need to convert multiple elements - you must always use arrays NOT
+lists as converter methods' parameters. Framework automatically uses that
+converters for conversion lists values too.
+
 ## Error Handling
 
 EasyRouting supports error handling by binding HTTP error codes to handler

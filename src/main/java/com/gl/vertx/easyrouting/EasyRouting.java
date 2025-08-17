@@ -607,8 +607,7 @@ public class EasyRouting {
             if (body == null) {
                 return null;
             }
-//            todo: fix me
-            Object convertedBody = convertFrom(contentType, (Class<?>)parameterType, body);
+            Object convertedBody = convertFrom(contentType, parameterType, body);
             return convertValue(convertedBody, parameterType);
         }
 
@@ -673,7 +672,7 @@ public class EasyRouting {
             throw new IllegalArgumentException("Unsupported value type: " + to);
         }
 
-        private Object convertFrom(String contentType, Class<?> type, Object value) {
+        private Object convertFrom(String contentType, Type type, Object value) {
             Object result = value;
             if (value != null && contentType != null)
                 result = annotatedConverters.convert(result, contentType, type);
@@ -694,7 +693,7 @@ public class EasyRouting {
             handlerResult.setAnnotations(method.getAnnotations());
             applyHttpHeaders(method, handlerResult);
 
-            Object convertedResult = convertTo(target, handlerResult.getResult(), (String) handlerResult.getHeaders().get(CONTENT_TYPE));
+            Object convertedResult = convertTo(target, handlerResult.getResult(), method.getGenericReturnType(), (String) handlerResult.getHeaders().get(CONTENT_TYPE));
             if (handlerResult.getResult() != convertedResult) {
                 handlerResult.setResult(convertedResult);
                 handlerResult.setResultClass(convertedResult.getClass());
@@ -703,11 +702,11 @@ public class EasyRouting {
             handlerResult.handle(ctx);
         }
 
-        private Object convertTo(Object target, Object result, String contentType) {
+        private Object convertTo(Object target, Object result, Type type, String contentType) {
             Object convertedResult = result;
 
             if (result != null && contentType != null)
-                convertedResult = annotatedConverters.convert(result, result.getClass(), contentType);
+                convertedResult = annotatedConverters.convert(result, type, contentType);
 
             return convertedResult;
         }
@@ -918,11 +917,28 @@ public class EasyRouting {
          * @return converted value, or original value if no converter found
          * @throws RuntimeException if conversion fails
          */
-        public Object convert(Object value, String from, Class<?> to) {
-            Method method = getConverter(from, to);
+        public Object convert(Object value, String from, Type to) {
+            Class<?> classTo;
+            Class<?> elementType = null;
+
+            if (to instanceof ParameterizedType parameterizedType) {
+                classTo = (Class<?>) parameterizedType.getRawType();
+                // use array converter
+                if (classTo.isAssignableFrom(List.class) && parameterizedType.getActualTypeArguments().length > 0) {
+                    elementType = (Class<?>) parameterizedType.getActualTypeArguments()[0];
+                    classTo = java.lang.reflect.Array.newInstance(elementType, 0).getClass();
+                }
+            } else {
+                classTo = (Class<?>) to;
+            }
+
+            Method method = getConverter(from, classTo);
             if (method != null) {
                 try {
-                    return method.invoke(null, RoutingContextHandler.convertValue(value, method.getParameterTypes()[0]));
+                    Object result = method.invoke(null, RoutingContextHandler.convertValue(value, method.getParameterTypes()[0]));
+                    return result.getClass().isArray() && elementType != null ?
+                            Arrays.asList((Object[]) result) :
+                            result;
                 } catch (Exception e) {
                     logger.error("Error converting value using @ConvertsTo method: " + method.getName(), e);
                     throw new RuntimeException(e);
@@ -941,17 +957,38 @@ public class EasyRouting {
          * @return converted value, or original value if no converter found
          * @throws RuntimeException if conversion fails
          */
-        public Object convert(Object value, Class<?> from, String to) {
-            Method method = getConverter(from, to);
+        public Object convert(Object value, Type from, String to) {
+            Class<?> classFrom;
+            Class<?> elementType = null;
+            Object localValue = value;
+
+            if (from instanceof ParameterizedType parameterizedType) {
+                classFrom = (Class<?>) parameterizedType.getRawType();
+                // use array converter
+                if (classFrom.isAssignableFrom(List.class) && parameterizedType.getActualTypeArguments().length > 0) {
+                    elementType = (Class<?>) parameterizedType.getActualTypeArguments()[0];
+                    classFrom = java.lang.reflect.Array.newInstance(elementType, 0).getClass();
+                    List<?> list = (List<?>) value;
+                    localValue = Array.newInstance(elementType, list.size());
+                    localValue = (Object[]) list.toArray((Object[]) localValue);
+                }
+            } else {
+                classFrom = (Class<?>) from;
+            }
+
+            Method method = getConverter(classFrom, to);
             if (method != null) {
                 try {
-                    return method.invoke(null, value);
+                    Object result = method.invoke(null, localValue);
+                    return result.getClass().isArray() && elementType != null ?
+                            Arrays.asList((Object[]) result) :
+                            result;
                 } catch (Exception e) {
                     logger.error("Error converting value using @ConvertsFrom method: " + method.getName(), e);
                     throw new RuntimeException(e);
                 }
             } else {
-                return value;
+                return localValue;
             }
         }
     }

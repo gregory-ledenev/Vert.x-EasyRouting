@@ -271,6 +271,12 @@ public class TestApplication {
             return users;
         }
 
+        @ContentType("text/user-string")
+        @POST("/testMultipleConversionFromList")
+        public List<User> testMultipleConversionFromList(@BodyParam("users") List<User> users) {
+            return users;
+        }
+
         @DecomposeBody
         @POST("/composeUser")
         public User composeUser(String name, String email) {
@@ -1023,6 +1029,35 @@ public class TestApplication {
                     HttpClient client = HttpClient.newHttpClient();
                     HttpRequest request = HttpRequest.newBuilder()
                             .uri(URI.create("http://localhost:8080/testMultipleConversionFrom"))
+                            .header("Content-Type", "text/user-string")
+                            .POST(HttpRequest.BodyPublishers.ofString("User[name=John Doe, email=john.doe@gmail.com]+User[name=Mike Hardy, email=mike.hardy@gmail.com]"))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("text/user-string", response.headers().map().get("content-type").get(0));
+                        assertEquals("User[name=John Doe, email=john.doe@gmail.com]+User[name=Mike Hardy, email=mike.hardy@gmail.com]", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testMultipleConversionFromList() throws Throwable {
+        TestApplicationImpl app = new TestApplicationImpl().
+                module(new TestConverters()).
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/testMultipleConversionFromList"))
                             .header("Content-Type", "text/user-string")
                             .POST(HttpRequest.BodyPublishers.ofString("User[name=John Doe, email=john.doe@gmail.com]+User[name=Mike Hardy, email=mike.hardy@gmail.com]"))
                             .build();
