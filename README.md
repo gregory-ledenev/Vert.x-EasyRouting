@@ -128,7 +128,7 @@ To run an Application with JWT authentication and SSL:
   secret key and pa nfvth's to protected resources
 - use `sslWithJks(jksKeyStorePath, jksKeyStorePassword)` or
   `sslWithPem(keyPath, certPath)` method to enable SSL
-- call `start(port)` method with an SSL port number (`443` by default for
+- call `start(port)` method with an SSL port number `443` by default for
   production or `8443` for development)
 
 ```java
@@ -160,10 +160,10 @@ To add support for JSON-RPC, you need:
 ```java
 import com.gl.vertx.easyrouting.annotations.Description;
 
-@Rpc("/api/jsonrpc/test")
+@Rpc("/api/jsonrpc/test", provideScheme = true)
 @Description("Sample service that provides simple test operations")
 public class JsonRpcTestApplication extends Application {
-    @Description("Multiplies two integers with an optional third integer")
+    @Description("Multiplies two integers")
     public int multiply(@Param("a") int a, @Param("b") int b) {
         return a * b;
     }
@@ -204,6 +204,7 @@ public interface Service {
 `@Rpc` annotation allows you to define a policy which methods are exported via JSON-RPC. You can set that policy via the`exportPolicy` parameter of the `@Rpc` annotation. The default policy is `RpcExportPolicy.ALL`, which means that all public methods are exported. You can also set `RpcExportPolicy.NONE` to disable exporting any methods.
 
 You can annotate particular methods with `@RpcInclude` to explicitly export them, or with `@RpcExclude` to explicitly exclude them from being exported. This allows you to have fine-grained control over which methods are available via JSON-RPC.
+
 
 #### Limitations
 The following are limitations:

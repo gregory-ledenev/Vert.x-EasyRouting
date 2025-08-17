@@ -134,7 +134,7 @@ public class JsonRpcContext extends RpcContext {
             JsonObject response = new JsonObject();
             response.put(KEY_VERSION, VERSION);
             response.put(KEY_ID, rpcRequest.getId());
-            response.put(KEY_RESULT, result != null ? convert(result) : null);
+            response.put(KEY_RESULT, convert(result));
             return new JsonRpcResponse(response);
         }
 
@@ -213,6 +213,9 @@ public class JsonRpcContext extends RpcContext {
     }
 
     private Object convert(Object result) {
+        if (result == null)
+            return result;
+
         if (result instanceof Buffer buffer) {
             return Base64.getEncoder().encodeToString(buffer.getBytes());
         } else if (result instanceof JsonObject jsonObject) {

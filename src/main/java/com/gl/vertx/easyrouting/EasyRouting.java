@@ -41,9 +41,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.annotation.*;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.Parameter;
+import java.lang.reflect.*;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
@@ -372,7 +370,7 @@ public class EasyRouting {
                     if (methodResult.hasBodyParam) {
                         Buffer bodyBuffer = ctx.getBody();
                         try {
-                            Object[] args = methodParameterValues(ctx, methodResult.method(), methodResult.parameterNames, methodResult.method().getParameterTypes(), ctx.request().params(), bodyBuffer);
+                            Object[] args = methodParameterValues(ctx, methodResult.method(), methodResult.parameterNames, methodResult.method().getGenericParameterTypes(), ctx.request().params(), bodyBuffer);
                             invokeHandlerMethod(ctx, methodResult, args);
                         } catch (Exception e) {
                             ctx.response()
@@ -382,7 +380,7 @@ public class EasyRouting {
                                     error("Error processing request body", e);
                         }
                     } else {
-                        Object[] args = methodParameterValues(ctx, methodResult.method(), methodResult.parameterNames, methodResult.method().getParameterTypes(), ctx.request().params(), null);
+                        Object[] args = methodParameterValues(ctx, methodResult.method(), methodResult.parameterNames, methodResult.method().getGenericParameterTypes(), ctx.request().params(), null);
                         invokeHandlerMethod(ctx, methodResult, args);
                     }
                 } else {
@@ -554,7 +552,7 @@ public class EasyRouting {
         private Object[] methodParameterValues(RoutingContext ctx,
                                                Method method,
                                                String[] parameterNames,
-                                               Class<?>[] parameterTypes,
+                                               Type[] parameterTypes,
                                                MultiMap requestParameters,
                                                Object body) {
             if (parameterTypes.length == 1 && parameterTypes[0].equals(RoutingContext.class)) {
@@ -605,16 +603,31 @@ public class EasyRouting {
             }
         }
 
-        private Object convertBody(String contentType, Class<?> parameterType, Object body) {
+        private Object convertBody(String contentType, Type parameterType, Object body) {
             if (body == null) {
                 return null;
             }
-            Object convertedBody = convertFrom(contentType, parameterType, body);
+//            todo: fix me
+            Object convertedBody = convertFrom(contentType, (Class<?>)parameterType, body);
             return convertValue(convertedBody, parameterType);
         }
 
-        static Object convertValue(Object value, Class<?> to) {
-            if (! to.isArray() && to.isAssignableFrom(value.getClass()) )
+        static Object convertValue(Object value, Type to) {
+            Class<?> classTo;
+            Type elementType = null;
+
+            if (to instanceof ParameterizedType parameterizedType) {
+                classTo = (Class<?>) parameterizedType.getRawType();
+                if (parameterizedType.getActualTypeArguments().length > 0)
+                    elementType = parameterizedType.getActualTypeArguments()[0];
+            } else {
+                classTo = (Class<?>) to;
+            }
+
+            if (! classTo.isArray() &&
+                    ! classTo.isAssignableFrom(List.class) &&
+                    ! classTo.isAssignableFrom(Map.class) &&
+                    classTo.isAssignableFrom(value.getClass()))
                 return value; // No conversion needed
 
             if (to == String.class) {
@@ -633,14 +646,26 @@ public class EasyRouting {
                 return Boolean.parseBoolean(value.toString());
             } else if (to == Buffer.class) {
                 return value instanceof Buffer buffer ? buffer : Buffer.buffer(value.toString());
-            } else if (!to.isPrimitive()) {
+            } else if (!classTo.isPrimitive()) {
                 try {
-                    if (value instanceof Map || value instanceof List || value instanceof JsonObject || value instanceof JsonArray)
-                        return new JsonMapper().convertValue(value, to);
-                    else if (value instanceof String)
-                        return new JsonMapper().readValue(value.toString(), to);
+                    JsonMapper jsonMapper = new JsonMapper();
+                    if (value instanceof Map || value instanceof List || value instanceof JsonObject || value instanceof JsonArray) {
+                        if (elementType != null) {
+                            if (value instanceof List) {
+                                final Class<?> elementClass = (Class<?>) elementType;
+                                return ((List<?>) value).stream()
+                                        .map(v -> jsonMapper.convertValue(v, elementClass))
+                                        .collect(Collectors.toList());
+
+                            }
+                        } else {
+                            return jsonMapper.convertValue(value, classTo);
+                        }
+                    } else if (value instanceof String) {
+                        return jsonMapper.readValue(value.toString(), classTo);
+                    }
                 } catch (Exception e) {
-                    throw new IllegalArgumentException("Failed to convert value to " + to.getName(), e);
+                    throw new IllegalArgumentException("Failed to convert value to " + classTo.getName(), e);
                 }
                 return value;
             }
@@ -655,7 +680,7 @@ public class EasyRouting {
             return result;
         }
 
-        private Object convertValue(RpcContext rpcContext, String parameterName, Class<?> parameterType, MultiMap parameters, String defaultValue) {
+        private Object convertValue(RpcContext rpcContext, String parameterName, Type parameterType, MultiMap parameters, String defaultValue) {
             Object value = rpcContext != null ? rpcContext.getRpcRequest().getArguments().get(parameterName) : null;
             if (value == null)
                 value = parameters.get(parameterName);

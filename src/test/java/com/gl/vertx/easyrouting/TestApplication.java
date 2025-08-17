@@ -111,6 +111,14 @@ public class TestApplication {
             return result;
         }
 
+        public List<com.gl.vertx.easyrouting.User> updateUserList(@Param("ids") List<String> ids, @Param("users") List<com.gl.vertx.easyrouting.User> users) {
+            List<com.gl.vertx.easyrouting.User> result = new ArrayList<>();
+            for (int i = 0; i < users.size(); i++) {
+                result.add(application.userService.updateUser(users.get(i), ids.get(i)));
+            }
+            return result;
+        }
+
         public boolean deleteUser(@Param("id") String id) {
             return application.userService.deleteUser(id);
         }
@@ -906,6 +914,49 @@ public class TestApplication {
         app.handleCompletionHandlerFailure();
     }
 
+    @Test
+    void testJsonRpcUpdateUserList() throws Throwable {
+        Application app = new TestApplicationImpl().
+                module(new JsonRpcUserApplicationModule()).
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
+                            .uri(URI.create("http://localhost:8080/api/users/jsonrpc"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {
+                                                                         "jsonrpc":"2.0",
+                                                                         "method":"updateUserList",
+                                                                         "params":{
+                                                                            "ids":["3"],
+                                                                            "users":[{
+                                                                               "id":"3",
+                                                                               "name":"Michael Smith JJJJJJJ",
+                                                                               "email":"mike.smith@example.com"
+                                                                            }]
+                                                                         },
+                                                                         "id":2
+                                                                      }"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("""
+                                     {"jsonrpc":"2.0","id":"2","result":[{"id":"3","name":"Michael Smith JJJJJJJ","email":"mike.smith@example.com"}]}""", response.body());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
     @Test
     void testConversionTo() throws Throwable {
         TestApplicationImpl app = new TestApplicationImpl().
