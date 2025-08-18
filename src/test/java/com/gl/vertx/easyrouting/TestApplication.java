@@ -21,6 +21,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TestApplication {
 
+    static class TestController {
+        @GET("/testcontroller/*")
+        public String hello(){
+            return "Hello from TestController!";
+        }
+    }
+
     @BeforeEach
     void setUp() {
         com.gl.vertx.easyrouting.User.clearUserIDCounter();
@@ -339,6 +346,33 @@ public class TestApplication {
                         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
                         assertEquals(200, response.statusCode());
                         assertEquals("Hello from TestApplication!", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testController() throws Throwable {
+        Application app = new TestApplicationImpl().
+                controller(new TestController()).
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/testcontroller/"))
+                            .GET()
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("Hello from TestController!", response.body());
                     } catch (Throwable e) {
                         throw new RuntimeException(e);
                     } finally {

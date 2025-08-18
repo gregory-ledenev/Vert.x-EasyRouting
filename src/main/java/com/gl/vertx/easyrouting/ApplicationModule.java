@@ -39,6 +39,7 @@ import io.vertx.ext.web.Router;
 public abstract class ApplicationModule<T extends Application> implements EasyRouting.AnnotatedConvertersHolder {
     protected T application;
     private final String[] protectedRoutes;
+    private final Object controller;
 
     @Override
     public EasyRouting.AnnotatedConverters getAnnotatedConverters() {
@@ -55,12 +56,23 @@ public abstract class ApplicationModule<T extends Application> implements EasyRo
     }
 
     /**
+     * Creates a new ApplicationModule with the specified application instance and protected routes. Protected routes
+     * require authentication before they can be accessed.
+     *
+     * @param protectedRoutes array of URL patterns for routes that require authentication
+     */
+    public ApplicationModule(String... protectedRoutes) {
+        this(null, protectedRoutes);
+    }
+
+    /**
      * Creates a new ApplicationModule with the specified application instance and protected routes.
      * Protected routes require authentication before they can be accessed.
      *
      * @param protectedRoutes array of URL patterns for routes that require authentication
      */
-    public ApplicationModule(String... protectedRoutes) {
+    public ApplicationModule(Object controller, String... protectedRoutes) {
+        this.controller = controller;
         this.protectedRoutes = protectedRoutes;
     }
 
@@ -69,7 +81,7 @@ public abstract class ApplicationModule<T extends Application> implements EasyRo
      * Protected routes require authentication before they can be accessed.
      */
     public ApplicationModule() {
-        this(new String[0]);
+        this(null, new String[0]);
     }
 
     /**
@@ -104,7 +116,17 @@ public abstract class ApplicationModule<T extends Application> implements EasyRo
      * @param router The Vert.x Router to register the controller with
      */
     public void setupController(Router router) {
-        EasyRouting.setupController(router, this);
-        new RpcController(this).setupController(router);
+        Object target = controller != null ? controller : this;
+        EasyRouting.setupController(router, target);
+        new RpcController(target).setupController(router);
+    }
+
+    /**
+     * Gets the controller object associated with this module.
+     *
+     * @return the controller object, or null if no controller is set
+     */
+    public Object getController() {
+        return controller;
     }
 }

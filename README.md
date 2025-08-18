@@ -206,10 +206,16 @@ public interface Service {
 ```
 #### Controlling Which Methods are Exported
 
-`@Rpc` annotation allows you to define a policy which methods are exported via JSON-RPC. You can set that policy via the`exportPolicy` parameter of the `@Rpc` annotation. The default policy is `RpcExportPolicy.ALL`, which means that all public methods are exported. You can also set `RpcExportPolicy.NONE` to disable exporting any methods.
+`@Rpc` annotation allows you to define a policy which methods are exported via
+JSON-RPC. You can set that policy via the`exportPolicy` parameter of the `@Rpc`
+annotation. The default policy is `RpcExportPolicy.ALL`, which means that all
+public methods are exported. You can also set `RpcExportPolicy.NONE` to disable
+exporting any methods.
 
-You can annotate particular methods with `@RpcInclude` to explicitly export them, or with `@RpcExclude` to explicitly exclude them from being exported. This allows you to have fine-grained control over which methods are available via JSON-RPC.
-
+You can annotate particular methods with `@RpcInclude` to explicitly export
+them, or with `@RpcExclude` to explicitly exclude them from being exported. This
+allows you to have fine-grained control over which methods are available via
+JSON-RPC.
 
 #### Limitations
 The following are limitations:
@@ -218,15 +224,22 @@ The following are limitations:
 
 ### Application Modules
 
-If your application is small, you can supply all the handler methods inside the Application itself. Otherwise, you can use
-Application Modules to organize and modularize application functionality by grouping related endpoint handlers together.
-You can create an Application Module by extending the `ApplicationModule` class, add all required and properly annotated
-handler methods, and then register the module with the Application using the `Application.module(...)` method. Also,
-you can define all the converters in a dedicated module to keep them in one place and to allow easy reuse.
+If your application is small, you can supply all the handler methods inside the
+Application itself. Otherwise, you can use
+Application Modules to organize and modularize application functionality by
+grouping related endpoint handlers together.
+You can create an Application Module by extending the `ApplicationModule` class,
+add all required and properly annotated
+handler methods, and then register the module with the Application using the
+`Application.module(...)` method. Also,
+you can define all the converters in a dedicated module to keep them in one
+place and to allow easy reuse. Override `started()` and `stopped()` methods to
+perform any initialization or cleanup tasks when the module is started or
+stopped.
 ```java
 static class UserApplicationModule extends ApplicationModule<UserAdminApplication> {
     @GET("/api/users")
-    List<User> getUsers() {
+    public List<User> getUsers() {
         return application.userService.getUsers();
     }
 }
@@ -238,6 +251,28 @@ public static void main(String[] args) {
             start();
 }
 ```
+
+### Application Controllers
+
+If you don't want or can't use `ApplicationModule`, you can supply any object 
+having handler methods to an `Application` using 'Application.controller()'
+method.
+```java
+static class UserApplicationController {
+    @GET("/api/users")
+    public List<User> getUsers() {
+        return application.userService.getUsers();
+    }
+}
+...
+public static void main(String[] args) {
+    new UserAdminApplication(new LoginService(), new UserService()).
+            controller(new UserApplicationController()).
+            jwtAuth(JWT_SECRET, "/api/*").
+            start();
+}
+```
+
 ## Using With Vert.x Router
 
 If `Application` is too simple for your needs, or if you want to use and mix

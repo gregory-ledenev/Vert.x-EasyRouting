@@ -294,6 +294,40 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder {
         return this;
     }
 
+    /**
+     * Registers a controller object with this application. The controller's methods annotated with routing annotations
+     * (e.g., @GET, @POST) will be automatically mapped to corresponding HTTP routes. Protected routes require
+     * authentication before they can be accessed.
+     *
+     * @param controller the controller object containing route handler methods
+     * @return the current {@code Application} instance, allowing for method chaining
+     * @throws IllegalStateException if attempting to register a controller after the application has started
+     */
+    public Application controller(Object controller) {
+        return controller(controller, new String[0]);
+    }
+
+    /**
+     * Registers a controller object with this application.
+     * The controller's methods annotated with routing annotations (e.g., @GET, @POST) will be
+     * automatically mapped to corresponding HTTP routes.
+     * Protected routes require authentication before they can be accessed.
+     *
+     * @param controller      the controller object containing route handler methods
+     * @param protectedRoutes array of URL patterns for routes that require authentication
+     * @return the current {@code Application} instance, allowing for method chaining
+     * @throws IllegalStateException if attempting to register a controller after the application has started
+     */
+    public Application controller(Object controller, String... protectedRoutes) {
+        Objects.requireNonNull(controller);
+        if (isRunning())
+            throw new IllegalStateException("Cannot register controller after application has started");
+        ApplicationModule<?> applicationModule = new ApplicationModule<>(controller, protectedRoutes) {};
+        applicationModule.setApplication(this);
+        applicationModules.add(applicationModule);
+        return this;
+    }
+
     private void removeShutdownHook() {
         if (shutdownHook != null) {
             try {
