@@ -222,20 +222,18 @@ The following are limitations:
 - Batch calling is not supported.
 - Positional parameters are not supported
 
-### Application Modules
+### Application Modules and Controllers
 
-If your application is small, you can supply all the handler methods inside the
-Application itself. Otherwise, you can use
-Application Modules to organize and modularize application functionality by
-grouping related endpoint handlers together.
-You can create an Application Module by extending the `ApplicationModule` class,
-add all required and properly annotated
-handler methods, and then register the module with the Application using the
-`Application.module(...)` method. Also,
-you can define all the converters in a dedicated module to keep them in one
-place and to allow easy reuse. Override `started()` and `stopped()` methods to
-perform any initialization or cleanup tasks when the module is started or
-stopped.
+If your application is small, you can supply all the handler methods inside the `Application` itself. Otherwise, you can
+use Application Modules or Controllers to organize and modularize application functionality by grouping related endpoint
+handlers together. Also, you can define all the converters in a dedicated module or controller to keep them in one place 
+and to allow easy reuse.
+
+You can create an Application Module by extending the `ApplicationModule` class, adding all required and properly
+annotated handler methods, and then registering the module with the Application using the `Application.module(...)`
+method. You can override `started()` and `stopped()` methods to perform any initialization or cleanup tasks when the
+module is started or stopped.
+
 ```java
 static class UserApplicationModule extends ApplicationModule<UserAdminApplication> {
     @GET("/api/users")
@@ -252,11 +250,10 @@ public static void main(String[] args) {
 }
 ```
 
-### Application Controllers
+If you don't want or can't use `ApplicationModule`, you can use any class as a Controller. You can create a Controller
+using any class, adding all required and properly annotated handler methods, and then registering the module with the
+Application using the `Application.controller(...)` method.
 
-If you don't want or can't use `ApplicationModule`, you can supply any object 
-having handler methods to an `Application` using 'Application.controller()'
-method.
 ```java
 static class UserApplicationController {
     @GET("/api/users")
