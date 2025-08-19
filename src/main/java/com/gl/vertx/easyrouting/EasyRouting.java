@@ -496,20 +496,20 @@ public class EasyRouting {
                 if (parameter.getAnnotation(Param.class) != null) {
                     Param param = parameter.getAnnotation(Param.class);
                     paramNames.add(param.value());
-                    String lowerCaseParam = param.value().toLowerCase();
-                    if (params.get(lowerCaseParam) != null)
+                    if (param.defaultValue().equals(Param.UNSPECIFIED)) {
+                        String lowerCaseParam = param.value().toLowerCase();
+                        if (params.get(lowerCaseParam) != null)
+                            matchedParamCount++;
+                        else if (isFormHandler && formAttributes != null && formAttributes.get(lowerCaseParam) != null)
+                            otherParamCount++;
+                    } else {
                         matchedParamCount++;
-                    else if (isFormHandler && formAttributes != null && formAttributes.get(lowerCaseParam) != null)
-                        otherParamCount++;
-                } else if (parameter.getAnnotation(OptionalParam.class) != null) {
-                    OptionalParam param = parameter.getAnnotation(OptionalParam.class);
-                    paramNames.add(param.value());
-                    matchedParamCount++;
-                    String lowerCaseParam = param.value().toLowerCase();
-                    if (params.get(lowerCaseParam) == null)
-                        optionalParamCount++;
-                    else if (isFormHandler && formAttributes != null && formAttributes.get(lowerCaseParam) != null)
-                        otherParamCount++;
+                        String lowerCaseParam = param.value().toLowerCase();
+                        if (params.get(lowerCaseParam) == null)
+                            optionalParamCount++;
+                        else if (isFormHandler && formAttributes != null && formAttributes.get(lowerCaseParam) != null)
+                            otherParamCount++;
+                    }
                 } else if (parameter.getAnnotation(BodyParam.class) != null) {
                     BodyParam param = parameter.getAnnotation(BodyParam.class);
                     otherParamCount++;
@@ -580,12 +580,12 @@ public class EasyRouting {
                 } else if (parameter.getType().equals(RoutingContext.class) && parameter.getAnnotation(ContextParam.class) != null) {
                     result.add(ctx);
                 } else {
-                    OptionalParam optionalParam = parameter.getAnnotation(OptionalParam.class);
-                    if (optionalParam != null) {
-                        result.add(convertValue(rpcContext, parameterNames[i], parameterTypes[i], requestParameters, optionalParam.defaultValue()));
-                    } else {
-                        result.add(convertValue(rpcContext, parameterNames[i], parameterTypes[i], requestParameters, null));
-                    }
+                    Param param = parameter.getAnnotation(Param.class);
+                    result.add(convertValue(rpcContext,
+                            parameterNames[i],
+                            parameterTypes[i],
+                            requestParameters,
+                            param != null && ! param.defaultValue().equals(Param.UNSPECIFIED) ? param.defaultValue() : null));
                 }
             }
 

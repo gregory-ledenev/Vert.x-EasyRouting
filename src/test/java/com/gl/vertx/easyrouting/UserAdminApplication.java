@@ -92,7 +92,7 @@ public class UserAdminApplication extends Application {
 
     @HandlesStatusCode(401)
     @GET("/unauthenticated")
-    Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
+    Result<?> unauthenticated(@Param(value = "redirect", defaultValue = "") String redirect) {
         return new Result<>("You are not unauthenticated to access this: " + redirect, 401);
     }
 }

@@ -43,4 +43,10 @@ public @interface Param {
      * @return the name of the method field
      */
     String value();
+    /*
+     * Specifies the default value for the parameter.
+     */
+    String defaultValue() default UNSPECIFIED;
+
+    public static final String UNSPECIFIED = "$$$unspecified-value$$$";
 }

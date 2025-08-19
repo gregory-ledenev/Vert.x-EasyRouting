@@ -395,7 +395,7 @@ with codes:
 ```java
 @HandleStatusCode(401)
 @GET("/unauthenticated")
-Result<?> unauthenticated(@OptionalParam("redirect") String redirect) {
+Result<?> unauthenticated(@Param("redirect", defaultValue = "") String redirect) {
     return new Result<>("You are not unauthenticated to access this: " + redirect, 401);
 }
 ```
@@ -463,8 +463,6 @@ be done in several ways:
   etc. In that case the warning will be logged.
 - using `@Param` annotation to bind request parameters or form arguments to
   method arguments
-- using `@OptionalParam` annotation to bind optional request parameters or form
-  arguments to method arguments
 - using `@BodyParam` annotation to bind HTTP body content to a method argument
 - using `@UploadsParam` annotation to bind a list of uploaded files to method
   arguments
@@ -479,16 +477,13 @@ parameters:
 public List<User> searchUsers(@Param("name") String name, @Param("age") Integer age) {
     // Access query parameters like /users/search?name=John&age=30
 }
-```
+``` 
 
-#### @OptionalParam
-
-Use the `@OptionalParam` annotation to bind optional request parameters or form
-arguments to method parameters:
+If a parameter is optional and can be missing in request - use a `@Param` annotation with specified `defaultValue` field:
 
 ```java
 @HttpMethods.GET("/users/search")
-public List<User> searchUsers(@Param("name") String name, @OptionalParam("age") Integer age) {
+public List<User> searchUsers(@Param("name") String name, @Param("age", defaulltValue="-1") Integer age) {
     // Access query parameters like /users/search?name=John&age=30
 }
 ```

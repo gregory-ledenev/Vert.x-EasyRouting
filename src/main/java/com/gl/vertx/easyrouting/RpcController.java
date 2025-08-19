@@ -155,7 +155,7 @@ public class RpcController {
     private static final Set<Class<? extends Annotation>> PARAMETER_ANNOTATIONS = Set.of(
             Param.class,
             PathParam.class,
-            OptionalParam.class,
+//            OptionalParam.class,
             ContextParam.class,
             BodyParam.class
     );

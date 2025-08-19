@@ -42,7 +42,7 @@ public class TestApplication {
                      
                      @param a the first integer
                      @param b the second integer""")
-        public int multiply(@Param("a") int a , @Param("b") int b, @OptionalParam(value = "c", defaultValue = "1") int c) {
+        public int multiply(@Param("a") int a , @Param("b") int b, @Param(value = "c", defaultValue = "1") int c) {
             return a * b * c;
         }
 
@@ -193,7 +193,7 @@ public class TestApplication {
     static class TestApplicationImpl extends Application {
         public static final String JWT_PASSWORD = "veeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeery long password";
 
-        public int add(@Param("a") int a , @Param("b") int b, @OptionalParam(value = "c", defaultValue = "0") int c) {
+        public int add(@Param("a") int a , @Param("b") int b, @Param(value = "c", defaultValue = "0") int c) {
             return a + b + c;
         }
 
@@ -220,7 +220,7 @@ public class TestApplication {
 
         @Form
         @POST(value = "/login")
-        public String login(@Param("user") String user, @Param("password") String password, @OptionalParam(value = "role") String role) {
+        public String login(@Param("user") String user, @Param("password") String password, @Param(value = "role", defaultValue = "") String role) {
             return JWTUtil.generateToken(getVertx(), user, Arrays.asList(role.split(",")), JWT_PASSWORD);
         }
 
@@ -232,7 +232,7 @@ public class TestApplication {
 
         @HandlesStatusCode(401)
         @GET(value = "/loginForm")
-        public String loginForm(@OptionalParam("redirect") String redirect) {
+        public String loginForm(@Param(value = "redirect", defaultValue = "") String redirect) {
             return "Login Form - redirect back to: " + redirect;
         }
 
@@ -252,7 +252,7 @@ public class TestApplication {
         }
 
         @GET(value = "/concatenate")
-        public String concatenate(@Param("str1") String str1, @Param("str2") String str2, @OptionalParam("str3") String str3) {
+        public String concatenate(@Param("str1") String str1, @Param("str2") String str2, @Param(value = "str3", defaultValue = "") String str3) {
             return str1 + str2 + (str3 != null && str3.isEmpty() ? "" : str3);
         }
 
