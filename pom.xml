@@ -3,64 +3,62 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.gl.vertx.easyrouting</groupId>
-    <artifactId>com-gl-vertx-easyrouting</artifactId>
-    <version>0.9.5</version>
-    <packaging>jar</packaging>
+    <groupId>io.github.gregory-ledenev</groupId>
+    <artifactId>vert.x-easyrouting</artifactId>
+    <version>0.9.6</version>
 
     <name>EasyRouting for Vert.x</name>
-    <description>Lightweight annotation-based HTTP routing library for Vert.x web applications</description>
-    <url>https://github.com/yourusername/vertx-easyrouting</url>
+    <description>
+        EasyRouting is a lightweight Vert.x HTTP routing and application framework that uses annotations to simplify
+        applications setup, inspired by JAX-RS and SpringBoot, but much simpler.
+    </description>
+    <url>https://github.com/gregory-ledenev/Vert.x-EasyRouting</url>
 
     <licenses>
         <license>
             <name>MIT License</name>
-            <url>https://opensource.org/licenses/MIT</url>
+            <url>https://opensource.org/license/mit</url>
             <distribution>repo</distribution>
         </license>
     </licenses>
 
     <developers>
         <developer>
+            <id>gregory-ledenev</id>
             <name>Gregory Ledenev</name>
             <email>gregory.ledenev37@gmail.com</email>
-            <roles>
-                <role>developer</role>
-            </roles>
         </developer>
     </developers>
 
-    <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <vertx.version>4.5.7</vertx.version>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
-    </properties>
+    <scm>
+        <connection>scm:git:git://github.com/gregory-ledenev/Vert.x-EasyRouting.git</connection>
+        <developerConnection>scm:git:ssh://github.com:gregory-ledenev/Vert.x-EasyRouting.git</developerConnection>
+        <url>https://github.com/gregory-ledenev/Vert.x-EasyRouting</url>
+    </scm>
 
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>io.vertx</groupId>
-                <artifactId>vertx-stack-depchain</artifactId>
-                <version>${vertx.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
+    <distributionManagement>
+        <repository>
+            <id>central</id>
+            <name>Central Portal Repository</name>
+            <url>https://central.sonatype.com/api/v1/publisher/</url>
+        </repository>
+    </distributionManagement>
 
     <dependencies>
         <dependency>
             <groupId>io.vertx</groupId>
             <artifactId>vertx-core</artifactId>
+            <version>5.0.3</version>
         </dependency>
         <dependency>
             <groupId>io.vertx</groupId>
             <artifactId>vertx-web</artifactId>
+            <version>5.0.3</version>
         </dependency>
         <dependency>
             <groupId>io.vertx</groupId>
             <artifactId>vertx-web-client</artifactId>
+            <version>5.0.3</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -76,6 +74,7 @@
         <dependency>
             <groupId>io.vertx</groupId>
             <artifactId>vertx-auth-jwt</artifactId>
+            <version>5.0.3</version>
         </dependency>
 
         <dependency>
@@ -91,142 +90,100 @@
         </dependency>
     </dependencies>
 
+    <properties>
+        <maven.compiler.release>17</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
     <build>
         <plugins>
-            <!-- Compiler Plugin -->
+            <!-- Central Publishing Plugin -->
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.8.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <publishingServerId>central</publishingServerId>
+                </configuration>
+            </plugin>
+
+            <!-- Maven Compiler Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.10.1</version>
+                <version>3.13.0</version>
                 <configuration>
-                    <source>${maven.compiler.source}</source>
-                    <target>${maven.compiler.target}</target>
-                    <parameters>true</parameters>
+                    <release>17</release>
+                    <compilerArgs>
+                        <arg>-parameters</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
-            
-            <!-- Source Plugin for including source code in the artifact -->
+
+            <!-- JAR Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+            </plugin>
+
+            <!-- Source JAR Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
-                <version>3.2.1</version>
+                <version>3.3.1</version>
                 <executions>
                     <execution>
                         <id>attach-sources</id>
                         <goals>
-                            <goal>jar-no-fork</goal>
+                            <goal>jar</goal>
                         </goals>
                     </execution>
                 </executions>
             </plugin>
-            
-            <!-- Javadoc Plugin for generating and including documentation -->
+
+            <!-- Javadoc JAR Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.4.1</version>
+                <version>3.6.3</version>
                 <executions>
                     <execution>
                         <id>attach-javadocs</id>
                         <goals>
                             <goal>jar</goal>
                         </goals>
-                        <configuration>
-                            <doclint>none</doclint>
-                        </configuration>
                     </execution>
                 </executions>
+                <configuration>
+                    <additionalJOption>-Xdoclint:none</additionalJOption>
+                </configuration>
             </plugin>
-            
-            <!-- Shade Plugin for creating a fat jar with all dependencies -->
+
+            <!-- GPG Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>3.4.1</version>
+                <artifactId>maven-gpg-plugin</artifactId>
+                <version>3.2.4</version>
                 <executions>
                     <execution>
-                        <id>fat-jar</id>
-                        <phase>package</phase>
+                        <id>sign-artifacts</id>
+                        <phase>verify</phase>
                         <goals>
-                            <goal>shade</goal>
+                            <goal>sign</goal>
                         </goals>
-                        <configuration>
-                            <transformers>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <manifestEntries>
-                                        <Main-Class>io.vertx.core.Launcher</Main-Class>
-                                        <Implementation-Title>${project.name}</Implementation-Title>
-                                        <Implementation-Version>${project.version}</Implementation-Version>
-                                        <Implementation-Vendor>${project.groupId}</Implementation-Vendor>
-                                    </manifestEntries>
-                                </transformer>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
-                                    <resource>META-INF/services/io.vertx.core.spi.VerticleFactory</resource>
-                                </transformer>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-                            </transformers>
-                            <createDependencyReducedPom>false</createDependencyReducedPom>
-                            <outputFile>${project.build.directory}/${project.artifactId}-${project.version}-fat.jar</outputFile>
-                        </configuration>
                     </execution>
                 </executions>
-            </plugin>
-            
-            <!-- Release Plugin for deploying to repositories -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-release-plugin</artifactId>
-                <version>3.0.0-M6</version>
                 <configuration>
-                    <tagNameFormat>v@{project.version}</tagNameFormat>
-                    <autoVersionSubmodules>true</autoVersionSubmodules>
-                    <useReleaseProfile>false</useReleaseProfile>
-                    <releaseProfiles>release</releaseProfiles>
-                    <goals>deploy</goals>
+                    <gpgArguments>
+                        <arg>--pinentry-mode</arg>
+                        <arg>loopback</arg>
+                        <arg>--no-tty</arg>
+                    </gpgArguments>
+                    <passphrase>${gpg.passphrase}</passphrase>
                 </configuration>
-            </plugin>
-            
-            <!-- SPDX License Check -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>license-maven-plugin</artifactId>
-                <version>2.0.0</version>
-                <configuration>
-                    <licenseName>mit</licenseName>
-                </configuration>
-            </plugin>
-            
-            <!-- Testing Plugin -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.0.0</version>
             </plugin>
         </plugins>
     </build>
-    
-    <profiles>
-        <profile>
-            <id>release</id>
-            <build>
-                <plugins>
-                    <!-- GPG Signature on release -->
-<!--                    <plugin>-->
-<!--                        <groupId>org.apache.maven.plugins</groupId>-->
-<!--                        <artifactId>maven-gpg-plugin</artifactId>-->
-<!--                        <version>3.0.1</version>-->
-<!--                        <executions>-->
-<!--                            <execution>-->
-<!--                                <id>sign-artifacts</id>-->
-<!--                                <phase>verify</phase>-->
-<!--                                <goals>-->
-<!--                                    <goal>sign</goal>-->
-<!--                                </goals>-->
-<!--                            </execution>-->
-<!--                        </executions>-->
-<!--                    </plugin>-->
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>

@@ -36,7 +36,8 @@ import io.vertx.ext.web.Router;
  * @param <T> the type of Application this module works with
  * @see Application
  */
-public abstract class ApplicationModule<T extends Application> implements EasyRouting.AnnotatedConvertersHolder {
+public abstract class ApplicationModule<T extends Application>
+        implements EasyRouting.AnnotatedConvertersHolder, ApplicationObject {
     protected T application;
     private final String[] protectedRoutes;
     private final Object controller;
@@ -98,7 +99,10 @@ public abstract class ApplicationModule<T extends Application> implements EasyRo
      * Sets up the module with a reference to the parent application instance.
      */
     @SuppressWarnings("EmptyMethod")
+    @Override
     public void started() {
+        if (controller instanceof ApplicationObject applicationObject)
+            applicationObject.started();
     }
 
     /**
@@ -106,7 +110,10 @@ public abstract class ApplicationModule<T extends Application> implements EasyRo
      * Cleans up the module's reference to the parent application.
      */
     @SuppressWarnings("EmptyMethod")
+    @Override
     public void stopped() {
+        if (controller instanceof ApplicationObject applicationObject)
+            applicationObject.stopped();
     }
 
     /**

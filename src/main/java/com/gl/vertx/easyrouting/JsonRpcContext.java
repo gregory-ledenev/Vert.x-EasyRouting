@@ -191,7 +191,7 @@ public class JsonRpcContext extends RpcContext {
      * @param e The exception that occurred during method invocation
      * @return RpcResponse representing the error response
      */
-    public RpcResponse getErrorMethodInvocationRpcResponse(Exception e) {
+    public RpcResponse getErrorMethodInvocationRpcResponse(Throwable e) {
         String message = e.getMessage();
         if (e instanceof InvocationTargetException ie)
             message = ie.getTargetException().getMessage();

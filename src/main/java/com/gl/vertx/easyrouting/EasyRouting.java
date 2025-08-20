@@ -26,6 +26,7 @@ package com.gl.vertx.easyrouting;
 
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.gl.vertx.easyrouting.annotations.*;
+import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
 import io.vertx.core.Vertx;
@@ -57,14 +58,14 @@ import static com.gl.vertx.easyrouting.Result.CT_APPLICATION_JSON;
  * EasyRouting provides annotation-based HTTP request handling for Vert.x web applications. It simplifies route
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
- * @version 0.9.5
+ * @version 0.9.6
  * @since 0.9.0
  */
 public class EasyRouting {
     /**
      * Current version of the EasyRouting library.
      */
-    public static final String VERSION = "0.9.5";
+    public static final String VERSION = "0.9.6";
 
 
     private static final Logger logger = LoggerFactory.getLogger(EasyRouting.class);
@@ -368,7 +369,7 @@ public class EasyRouting {
                     }
                 } else if (checkRequiredRoles(ctx, methodResult.method)) {
                     if (methodResult.hasBodyParam) {
-                        Buffer bodyBuffer = ctx.getBody();
+                        Buffer bodyBuffer = ctx.body().buffer();
                         try {
                             Object[] args = methodParameterValues(ctx, methodResult.method(), methodResult.parameterNames, methodResult.method().getGenericParameterTypes(), ctx.request().params(), bodyBuffer);
                             invokeHandlerMethod(ctx, methodResult, args);
@@ -401,23 +402,23 @@ public class EasyRouting {
         private void invokeHandlerMethod(RoutingContext ctx, MethodResult handlerMethod, Object[] args) {
             try {
                 if (handlerMethod.method().isAnnotationPresent(Blocking.class)) {
-                    ctx.vertx().executeBlocking(promise -> {
-                        // Blocking operation
-                        Object result;
+                    Future<Object> future = ctx.vertx().executeBlocking(() -> {
                         try {
-                            result = handlerMethod.method().invoke(target, args);
+                            return handlerMethod.method().invoke(target, args);
                         } catch (Exception e) {
                             throw new RuntimeException(e);
                         }
-                        promise.complete(result);
-                    }, res -> {
-                        if (res.succeeded()) {
-                            processHandlerResult(handlerMethod.method(), ctx, res.result());
+                    });
+                    future.onComplete((result, e) -> {
+                        if (e == null) {
+                            processHandlerResult(handlerMethod.method(), ctx, result);
                         } else {
-                            if (res.cause() instanceof RuntimeException)
-                                throw (RuntimeException) res.cause();
+                            logger.error("Error during blocking method invocation", e);
+                            RpcContext rpcContext = RpcContext.getRpcContext(ctx);
+                            if (rpcContext != null)
+                                rpcContext.getErrorMethodInvocationRpcResponse(e).handle(ctx);
                             else
-                                throw new RuntimeException(res.cause());
+                                ctx.response().setStatusCode(500).end(e.getMessage());
                         }
                     });
                 } else {

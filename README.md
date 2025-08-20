@@ -21,7 +21,7 @@ Get started in minutes and build clean, maintainable web apps with less
 boilerplate code. Here’s literally all it takes:
 
 ```java
-class HelloWorld extends Application {
+public class HelloWorld extends Application {
     @GET("/*")
     public String hello() {
         return "Hello World!";
@@ -36,7 +36,7 @@ Making JSON-RPC application is as easy as:
 
 ```java
 @Rpc
-class TestApplication extends Application {
+public class TestApplication extends Application {
     
     public String hello() {
         return "Hello from JSON-RPC TestApplication!";
@@ -80,7 +80,7 @@ There is a special `Application` class that allows building applications with ea
 for production, prototyping and testing purposes without learning how to create 
 a full Vert.x application:
 
-1. Make your class extend `Application`.
+1. Make your class extend `Application` and is **public**.
 2. Write regular methods for your app’s logic, add simple annotations for HTTP
    verbs and paths.
 3. Use Java objects for parameters and return values - no dealing with JSON.
@@ -88,7 +88,7 @@ a full Vert.x application:
 5. Add a main method that creates your applications and calls `start()`.
 
 ```java
-class TestApplication extends Application {
+public class TestApplication extends Application {
     @GET("/*")
     String hello() {
         return "Hello from TestApplication!";
@@ -108,7 +108,7 @@ You may use that application to simplify making your tests:
   assertion errors, and to make your tests functional
 
 ```java
-class TestApplication extends Application {
+public class TestApplication extends Application {
     @GET("/*")
     String hello() {
         return "Hello from TestApplication!";
@@ -152,7 +152,7 @@ to focus on implementing the actual method logic.
 
 To add support for JSON-RPC, you need:
 
-1. Subclass the `Application` or `ApplicationMoudle` class.
+1. Subclass the `Application` or `ApplicationMoudle` class and make it **public**.
 2. Annotate the class with `@Rpc` with an endpoint path to indicate that it is
    an RPC module.
 3. Implement all required methods that can be accessible via JSON-RPC. Note:
@@ -229,7 +229,7 @@ use Application Modules or Controllers to organize and modularize application fu
 handlers together. Also, you can define all the converters in a dedicated module or controller to keep them in one place 
 and to allow easy reuse.
 
-You can create an Application Module by extending the `ApplicationModule` class, adding all required and properly
+You can create an Application Module by extending the `ApplicationModule` class, making it public, adding all required and properly
 annotated handler methods, and then registering the module with the Application using the `Application.module(...)`
 method. You can override `started()` and `stopped()` methods to perform any initialization or cleanup tasks when the
 module is started or stopped.
@@ -251,11 +251,11 @@ public static void main(String[] args) {
 ```
 
 If you don't want or can't use `ApplicationModule`, you can use any class as a Controller. You can create a Controller
-using any class, adding all required and properly annotated handler methods, and then registering the module with the
+using any public class, adding all required and properly annotated handler methods, and then registering the module with the
 Application using the `Application.controller(...)` method.
 
 ```java
-static class UserApplicationController {
+public static class UserApplicationController {
     @GET("/api/users")
     public List<User> getUsers() {
         return application.userService.getUsers();
@@ -276,7 +276,7 @@ If `Application` is too simple for your needs, or if you want to use and mix
 EasyRouting with your exiting Vert.x code — you can use EasyRouting with Vert.x
 Router.
 
-### 1. Create a Controller Class
+### 1. Create a public Controller Class
 
 ```java
 public class Controller {
@@ -637,11 +637,23 @@ folder that demonstrate various features of the EasyRouting library:
 
 ## Adding to Your Build
 
-To add to your build either:
-
-- copy `com.gl.vertx.easyrouting` sources to your project and compile them.
-- build the project and add the corresponding jar's from the _target_ folder to
-  your class path or to your build tool dependencies.
+To add EasyRouting to your build system, you can use the following Maven dependency:
+```xml
+<dependency>
+    <groupId>io.github.gregory-ledenev</groupId>
+    <artifactId>vert.x-easyrouting</artifactId>
+    <version>0.9.6</version>
+</dependency>
+```
+To add JavaDoc:
+```xml
+<dependency>
+    <groupId>io.github.gregory-ledenev</groupId>
+    <artifactId>vert.x-easyrouting</artifactId>
+    <version>0.9.6</version>
+    <classifier>javadoc</classifier>
+</dependency>
+```
 
 ## License
 

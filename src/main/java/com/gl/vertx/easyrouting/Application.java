@@ -60,7 +60,7 @@ import java.util.function.Consumer;
  *     }
  * }</pre>
  */
-public class Application implements EasyRouting.AnnotatedConvertersHolder {
+public class Application implements EasyRouting.AnnotatedConvertersHolder, ApplicationObject {
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private int port;
     private boolean readInput;
@@ -112,7 +112,7 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder {
 
             createHttpServer(startPromise, router, port);
 
-            started();
+            startedImpl();
         }
     }
 
@@ -347,7 +347,7 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder {
         if (vertx != null) {
             logger.info("Application stopping...");
             vertx.close().onComplete(result -> {
-                stopped();
+                stoppedImpl();
                 stopWaiting();
                 synchronized (shutdownLock) {
                     shutdownLock.notify();
@@ -370,12 +370,22 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder {
         }
     }
 
+    @Override
     public void started() {
+    }
+
+    @Override
+    public void stopped() {
+    }
+
+    private void startedImpl() {
+        started();
         for (ApplicationModule<?> applicationModule : applicationModules)
             applicationModule.started();
     }
 
-    public void stopped() {
+    private void stoppedImpl() {
+        stopped();
         for (ApplicationModule<?> applicationModule : applicationModules)
             applicationModule.stopped();
     }

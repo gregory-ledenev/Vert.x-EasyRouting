@@ -92,7 +92,7 @@ public abstract class RpcContext {
 
     public abstract RpcResponse getRpcResponse(Object result);
     public abstract RpcResponse getNoMethodRpcResponse();
-    public abstract RpcResponse getErrorMethodInvocationRpcResponse(Exception e);
+    public abstract RpcResponse getErrorMethodInvocationRpcResponse(Throwable e);
 
     public static class RpcRequest {
         private final String methodName;
