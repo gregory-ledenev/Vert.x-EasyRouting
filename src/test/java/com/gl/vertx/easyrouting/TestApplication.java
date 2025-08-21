@@ -241,12 +241,14 @@ public class TestApplication {
             return "Hello protected API!";
         }
 
-        @GET(value = "/api/user/*", requiredRoles = {"user", "admin"})
+        @RequiredRoles({"user", "admin"})
+        @GET(value = "/api/user/*")
         public String apiUser() {
             return "Hello protected API (user)!";
         }
 
-        @GET(value = "/api/admin/*", requiredRoles = {"admin"})
+        @RequiredRoles({"admin"})
+        @GET(value = "/api/admin/*")
         public String apiAdmin() {
             return "Hello protected API (admin)!";
         }

@@ -159,6 +159,8 @@ public class HttpMethods {
             for (Annotation annotation : method.getAnnotations()) {
                 String[] roles = getRolesForAnnotation(annotation);
                 if (roles != null) return roles;
+                if (annotation instanceof RequiredRoles requiredRoles)
+                    return requiredRoles.value();
             }
         } catch (Exception e) {
             throw new RuntimeException("Failed to get required roles", e);

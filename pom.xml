@@ -5,7 +5,7 @@
 
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.6</version>
+    <version>0.9.7</version>
 
     <name>EasyRouting for Vert.x</name>
     <description>

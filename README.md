@@ -337,7 +337,7 @@ authenticated users.
 
 ```java
 @DELETE(value = "/api/users/:id", requiredRoles = {"admin"})
-boolean deleteUser(@Param("id") String id) {
+public boolean deleteUser(@Param("id") String id) {
     return userService.deleteUser(id);
 }
 ```
@@ -354,7 +354,7 @@ such methods.
 ```java
 @Blocking
 @GET(value = "/blockingHello")
-String blockingHello() {
+public String blockingHello() {
     try {
         Thread.sleep(5000); // simulate blocking operation
     } catch (InterruptedException e) {
@@ -370,7 +370,7 @@ Use `@Form` annotation to mark methods that should handle form data:
 ```java
 @Form
 @POST("/loginForm")
-String loginForm(@Param("user") String user, @Param("password") String password) {
+public String loginForm(@Param("user") String user, @Param("password") String password) {
         ...
 }
 ```
@@ -382,7 +382,7 @@ Use `@ContentType` annotation to set the response content type:
 ```java
 @GET("/text")
 @ContentType("text/plain")
-String getText() {
+public String getText() {
     return "Hello <b>World!</b>";
 }
 ```
@@ -395,7 +395,7 @@ with codes:
 ```java
 @HandleStatusCode(401)
 @GET("/unauthenticated")
-Result<?> unauthenticated(@Param("redirect", defaultValue = "") String redirect) {
+public Result<?> unauthenticated(@Param("redirect", defaultValue = "") String redirect) {
     return new Result<>("You are not unauthenticated to access this: " + redirect, 401);
 }
 ```
@@ -407,7 +407,7 @@ Use `@FileFromFolder` annotation to serve static files from the file system:
 ```java
 @GET("/*")
 @FileFromFolder("document")
-String get(@PathParam("path") String path) {
+public String get(@PathParam("path") String path) {
     return path;
 }
 ```
@@ -419,7 +419,7 @@ Use `@FileFromResource` annotation to serve static files from the classpath:
 ```java
 @GET("/*")
 @FileFromResource(UserAdminApplication.class)
-String get(@PathParam("path") String path) {
+public String get(@PathParam("path") String path) {
     return path;
 }
 ```
@@ -432,26 +432,36 @@ the annotated method returns null:
 ```java
 @GET("/api/users/:id")
 @NotNullResult(value = "No user found", statusCode = 404)
-User getUser(@Param("id") String id) {
+public User getUser(@Param("id") String id) {
     return userService.getUser(id);
 }
 ```
 
-#### @HttpHeaders.Header
+#### @HttpHeader
 
-Use `@HttpHeaders.Header` annotation to set HTTP headers in the response. You can use it multiple times to set multiple
+Use `@HttpHeader` annotation to set HTTP headers in the response. You can use it multiple times to set multiple
 headers:
 
 ```java
-@Header("content-type: text/plain")
-@Header("header1: value1")
-@Header("header2: value2")
+@HttpHeader("content-type: text/plain")
+@HttpHeader("header1: value1")
+@HttpHeader("header2: value2")
 @GET("/multipleHeaders")
-String getMultipleHeaders() {
+public String getMultipleHeaders() {
     return "Multiple Headers";
 }
 ```
 
+#### @RequiredRoles
+
+The `@RequiredRoles` annotation allows marking a method that it requires certain auth. roles to be accessible.
+```java
+
+@RequiredRoles({"user"})
+public User getUser(@Param("id") String id) {
+    return userService.getUser(id);
+}
+```
 ### Annotating Method Parameters
 
 EasyRouting automatically tries to bind request parameters, form arguments, and
@@ -528,7 +538,7 @@ handler and return it.
 
 ```java
 @GET("/testCustomHandler")
-Result<String> testCustomHandler() {
+public Result<String> testCustomHandler() {
     return new Result<>("Hello").handler((result, ctx) -> result.setResult(result.getResult() + " World!"));
 }
 ```
@@ -544,8 +554,7 @@ EasyRouting.applyJWTAuth(vertx, router, "/api/",<SECRET KEY>);
 ```
 
 You may authorize certain methods to be accessed only by certain roles by
-specifying them as `requiredRoles` in the
-`@GET`, `@POST` etc. annotations:
+specifying them as `requiredRoles` in the `@GET`, `@POST` etc. or `@RequiredRoles` annotations:
 
 ```java
 @HttpMethods.GET("/users/:id", requiredRoles = {"admin"})
@@ -578,7 +587,7 @@ For example, the following converter converts objects of the `User` type to obje
 content type:
 ```java
 @ConvertsTo("text/user-string")
-public String convertUserToText(User user) {
+public static String convertUserToText(User user) {
     return user.toString();
 }
 ```
@@ -642,7 +651,7 @@ To add EasyRouting to your build system, you can use the following Maven depende
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.6</version>
+    <version>0.9.7</version>
 </dependency>
 ```
 To add JavaDoc:
@@ -650,7 +659,7 @@ To add JavaDoc:
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.6</version>
+    <version>0.9.7</version>
     <classifier>javadoc</classifier>
 </dependency>
 ```

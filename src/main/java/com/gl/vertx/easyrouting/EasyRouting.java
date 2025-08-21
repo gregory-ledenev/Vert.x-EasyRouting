@@ -58,14 +58,14 @@ import static com.gl.vertx.easyrouting.Result.CT_APPLICATION_JSON;
  * EasyRouting provides annotation-based HTTP request handling for Vert.x web applications. It simplifies route
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
- * @version 0.9.6
- * @since 0.9.0
+ * @version 0.9.7
+ * @since 0.9.7
  */
 public class EasyRouting {
     /**
      * Current version of the EasyRouting library.
      */
-    public static final String VERSION = "0.9.6";
+    public static final String VERSION = "0.9.7";
 
 
     private static final Logger logger = LoggerFactory.getLogger(EasyRouting.class);
@@ -415,10 +415,14 @@ public class EasyRouting {
                         } else {
                             logger.error("Error during blocking method invocation", e);
                             RpcContext rpcContext = RpcContext.getRpcContext(ctx);
-                            if (rpcContext != null)
+                            if (rpcContext != null) {
                                 rpcContext.getErrorMethodInvocationRpcResponse(e).handle(ctx);
-                            else
-                                ctx.response().setStatusCode(500).end(e.getMessage());
+                            } else {
+                                String message = e.getMessage();
+                                if (e.getCause() instanceof InvocationTargetException ie)
+                                    message = ie.getTargetException().getMessage();
+                                ctx.response().setStatusCode(500).end(message);
+                            }
                         }
                     });
                 } else {

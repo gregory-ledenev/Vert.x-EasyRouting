@@ -26,6 +26,7 @@
 
 package com.gl.vertx.easyrouting;
 
+import com.gl.vertx.easyrouting.annotations.RequiredRoles;
 import com.gl.vertx.easyrouting.annotations.Rpc;
 import com.gl.vertx.easyrouting.annotations.RpcExclude;
 import com.gl.vertx.easyrouting.annotations.RpcInclude;
@@ -36,12 +37,15 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
+import static com.gl.vertx.easyrouting.TestApplication.JWT_TOKEN_USER;
+import static com.gl.vertx.easyrouting.TestApplication.JWT_TOKEN_USER_ADMIN;
+import static com.gl.vertx.easyrouting.TestApplication.TestApplicationImpl.JWT_PASSWORD;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class HelloWorldJsonRpcTest {
     @SuppressWarnings("SameReturnValue")
     @Rpc(path = "/*", provideScheme = true)
-    static class HelloWorldJsonRpcApplication extends Application {
+    public static class HelloWorldJsonRpcApplication extends Application {
         public static void main(String[] args) {
             new HelloWorldJsonRpcApplication().start();
         }
@@ -51,6 +55,25 @@ public class HelloWorldJsonRpcTest {
         }
 
         @RpcExclude
+        public String bye() {
+            return "Bye";
+        }
+    }
+
+    @Rpc(path = "/*")
+    public static class HelloWorldAuthJsonRpcApplication extends Application {
+        public static void main(String[] args) {
+            new HelloWorldAuthJsonRpcApplication().
+                    jwtAuth(JWT_PASSWORD, "/*").
+                    start();
+        }
+
+        @RequiredRoles({"admin"})
+        public String hello() {
+            return "Hello, World!";
+        }
+
+        @RequiredRoles({"user", "admin"})
         public String bye() {
             return "Bye";
         }
@@ -192,4 +215,91 @@ public class HelloWorldJsonRpcTest {
 
         app.handleCompletionHandlerFailure();
     }
+
+    @Test
+    void testUnauthenticated() throws Throwable {
+        Application app = new HelloWorldAuthJsonRpcApplication().
+                jwtAuth(JWT_PASSWORD, "/*").
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create("http://localhost:8080/api/"))
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {"jsonrpc": "2.0", "method": "hello", "params": {}, "id": 2}"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(401, response.statusCode()); // redirect /loginForm
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                })
+                .start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testAuthorized() throws Throwable {
+        Application app = new HelloWorldAuthJsonRpcApplication().
+                jwtAuth(JWT_PASSWORD, "/*").
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
+                            .uri(URI.create("http://localhost:8080/"))
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {"jsonrpc": "2.0", "method": "hello", "params": {}, "id": 2}"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("""
+                                     {"jsonrpc":"2.0","id":"2","result":"Hello, World!"}""", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                })
+                .start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testUnauthorizedForAdmin() throws Throwable {
+        Application app = new HelloWorldAuthJsonRpcApplication().
+                jwtAuth(JWT_PASSWORD, "/*").
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER)
+                            .uri(URI.create("http://localhost:8080/"))
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {"jsonrpc": "2.0", "method": "hello", "params": {}, "id": 2}"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(403, response.statusCode());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                })
+                .start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
 }
