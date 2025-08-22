@@ -1,8 +1,8 @@
 # EasyRouting for Vert.x
 
 EasyRouting is a lightweight, annotation-driven HTTP routing library designed
-to build Vert.x web applications. It simplifies web development by letting you define
-routes with Java annotations—no need to manage complex request or response
+to build Vert.x web applications. It simplifies RESTful or JSON-RPC application development by letting you define
+routes or handler methods with Java annotations—no need to manage complex request or response
 objects.
 
 Inspired by JAX-RS and Spring Boot’s routing style, EasyRouting provides a
