@@ -51,9 +51,7 @@ public class HelloWorld extends Application {
     }
 
     public static void main(String[] args) {
-        new HelloWorld()
-                .jwtAuth(JWT_SECRET, "/*")
-                .start();
+        new HelloWorld().start();
     }
 }
 
