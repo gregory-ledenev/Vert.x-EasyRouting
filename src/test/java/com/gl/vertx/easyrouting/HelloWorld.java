@@ -26,19 +26,67 @@
 
 package com.gl.vertx.easyrouting;
 
+import com.gl.vertx.easyrouting.annotations.Blocking;
 import com.gl.vertx.easyrouting.annotations.Rpc;
+import org.junit.jupiter.api.Test;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
+import static com.gl.vertx.easyrouting.TestApplication.JWT_TOKEN_USER_ADMIN;
+import static com.gl.vertx.easyrouting.TestApplication.TestApplicationImpl.JWT_PASSWORD;
 import static com.gl.vertx.easyrouting.UserAdminApplication.JWT_SECRET;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@Rpc(path = "/*")
+@Rpc
 public class HelloWorld extends Application {
+    @Blocking
+    public String hello() {
+        try {
+            Thread.sleep(5000); // simulate blocking op
+        } catch (InterruptedException aE) {}
+        return "Hello, World!";
+    }
+
     public static void main(String[] args) {
         new HelloWorld()
                 .jwtAuth(JWT_SECRET, "/*")
                 .start();
     }
+}
 
-    public String hello() {
-        return "Hello, World!";
+class HelloWorldAppTest {
+    @Test
+    void testHelloWorld() throws Throwable {
+        Application app = new HelloWorld()
+                .jwtAuth(JWT_PASSWORD, "/*")
+                .onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
+                            .uri(URI.create("http://localhost:8080/"))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("""
+                                                                      {"jsonrpc": "2.0", "method": "hello", "params": {}, "id":2}"""))
+                            .build();
+
+                    try {
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("""
+                                     {"jsonrpc":"2.0","id":"2","result":"Hello, World!"}""", response.body());
+                        System.out.println(response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
     }
 }
