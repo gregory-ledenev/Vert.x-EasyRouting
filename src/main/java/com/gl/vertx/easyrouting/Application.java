@@ -31,6 +31,7 @@ import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.net.JksOptions;
 import io.vertx.core.net.PemKeyCertOptions;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.common.template.TemplateEngine;
 import io.vertx.ext.web.handler.BodyHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,14 +63,17 @@ import java.util.function.Consumer;
  * }</pre>
  */
 public class Application implements EasyRouting.AnnotatedConvertersHolder, ApplicationObject {
+    private static final Object shutdownLock = new Object();
     private final Logger logger = LoggerFactory.getLogger(getClass());
+    private final List<ApplicationModule<?>> applicationModules = new ArrayList<>();
+    private final EasyRouting.AnnotatedConverters annotatedConverters = new EasyRouting.AnnotatedConverters();
+    private final Object waitLock = new Object();
     private int port;
     private boolean readInput;
     private Consumer<Application> completionHandler;
     private String jwtSecret;
     private String[] protectedRoutes;
     private BiConsumer<Application, Throwable> failureHandler;
-
     private Throwable completionHandlerFailure;
     private ApplicationVerticle applicationVerticle;
     private Vertx vertx;
@@ -78,43 +82,13 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     private JksOptions jksOptions;
     private PemKeyCertOptions pemKeyCertOptions;
     private Thread shutdownHook;
-    private final List<ApplicationModule<?>> applicationModules = new ArrayList<>();
-    private final EasyRouting.AnnotatedConverters annotatedConverters = new EasyRouting.AnnotatedConverters();
+    private TemplateEngineFactory.Type templateEngineType = TemplateEngineFactory.Type.UNKNOWN;
+    private BiConsumer<TemplateEngine, TemplateEngineFactory.Type> templateEngineConfigurator;
+    private TemplateEngine templateEngine;
 
     @Override
     public EasyRouting.AnnotatedConverters getAnnotatedConverters() {
         return annotatedConverters;
-    }
-
-    class ApplicationVerticle extends AbstractVerticle {
-        @Override
-        public void start(Promise<Void> startPromise) {
-            Router router = Router.router(vertx);
-
-            router.route().handler(BodyHandler.create());
-
-            if (jwtSecret != null) {
-                for (ApplicationModule<?> applicationModule : applicationModules) {
-                    for (String protectedRoute : applicationModule.getProtectedRoutes())
-                        EasyRouting.applyJWTAuth(vertx, router, protectedRoute, jwtSecret);
-                }
-
-                if (protectedRoutes != null) {
-                    for (String protectedRoute : protectedRoutes)
-                        EasyRouting.applyJWTAuth(vertx, router, protectedRoute, jwtSecret);
-                }
-            }
-
-            for (ApplicationModule<?> applicationModule : applicationModules)
-                applicationModule.setupController(router);
-
-            EasyRouting.setupController(router, Application.this);
-            new RpcController(Application.this).setupController(router);
-
-            createHttpServer(startPromise, router, port);
-
-            startedImpl();
-        }
     }
 
     @SuppressWarnings("unchecked")
@@ -123,11 +97,10 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     }
 
     /**
-     * Configures the application to use JWT-based authentication.
-     * Sets up JWT authentication for a passed JWT secret and defines the routes
-     * where JWT authentication should be applied.
+     * Configures the application to use JWT-based authentication. Sets up JWT authentication for a passed JWT secret
+     * and defines the routes where JWT authentication should be applied.
      *
-     * @param jwtSecret the secret key used to sign and verify JWT tokens
+     * @param jwtSecret       the secret key used to sign and verify JWT tokens
      * @param protectedRoutes routes or endpoints requiring JWT authentication
      * @return the current {@code Application} instance, allowing for method chaining
      */
@@ -139,9 +112,9 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     }
 
     /**
-     * Configures the application to use JKS (Java KeyStore) for SSL/TLS encryption.
-     * Sets the path to the JKS key store and the password for accessing it.
-     * If PEM key and certificate options are already set, they will be cleared and ignored.
+     * Configures the application to use JKS (Java KeyStore) for SSL/TLS encryption. Sets the path to the JKS key store
+     * and the password for accessing it. If PEM key and certificate options are already set, they will be cleared and
+     * ignored.
      *
      * @param jksKeyStorePath     the path to the JKS key store file
      * @param jksKeyStorePassword the password for the JKS key store
@@ -164,9 +137,9 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     }
 
     /**
-     * Configures the application to use PEM (Privacy Enhanced Mail) key and certificate for SSL/TLS encryption.
-     * Sets the paths to the PEM key and certificate files.
-     * If JKS options are already set, they will be cleared and ignored.
+     * Configures the application to use PEM (Privacy Enhanced Mail) key and certificate for SSL/TLS encryption. Sets
+     * the paths to the PEM key and certificate files. If JKS options are already set, they will be cleared and
+     * ignored.
      *
      * @param keyPath  the path to the PEM key file
      * @param certPath the path to the PEM certificate file
@@ -189,8 +162,8 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     }
 
     /**
-     * Registers a completion handler to be executed when the application starts successfully.
-     * The handler receives the current application instance as a parameter.
+     * Registers a completion handler to be executed when the application starts successfully. The handler receives the
+     * current application instance as a parameter.
      *
      * @param completionHandler a {@code Consumer} that processes the application instance upon successful startup
      * @return the current {@code Application} instance, allowing for method chaining
@@ -201,11 +174,11 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     }
 
     /**
-     * Registers a failure handler executed when an application startup failure occurs.
-     * The failure handler receives the current application instance and the related {@code Throwable}.
+     * Registers a failure handler executed when an application startup failure occurs. The failure handler receives the
+     * current application instance and the related {@code Throwable}.
      *
-     * @param failureHandler a {@code BiConsumer} accepting the application instance and the exception
-     *                       that caused the startup failure
+     * @param failureHandler a {@code BiConsumer} accepting the application instance and the exception that caused the
+     *                       startup failure
      * @return the current {@code Application} instance, allowing for method chaining
      */
     public <T extends Application> T onStartFailure(BiConsumer<Application, Throwable> failureHandler) {
@@ -235,8 +208,8 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     /**
      * Starts the application on the specified port.
      *
-     * @param port              the port number on which to start the server
-     * @param host              the hostname or IP address to which the server will bind (e.g., "localhost" or "0.0.0.0")
+     * @param port the port number on which to start the server
+     * @param host the hostname or IP address to which the server will bind (e.g., "localhost" or "0.0.0.0")
      */
     @SuppressWarnings("UnusedReturnValue")
     public <T extends Application> T start(int port, String host) {
@@ -257,9 +230,9 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     }
 
     /**
-     * Registers a shutdown hook that ensures the application is properly stopped when the JVM shuts down.
-     * If the application is running when the shutdown hook is triggered, it will initiate a graceful
-     * shutdown of the application by calling the stop() method.
+     * Registers a shutdown hook that ensures the application is properly stopped when the JVM shuts down. If the
+     * application is running when the shutdown hook is triggered, it will initiate a graceful shutdown of the
+     * application by calling the stop() method.
      */
     public Application handleShutdown() {
         if (shutdownHook != null) {
@@ -278,9 +251,8 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     }
 
     /**
-     * Registers an application module with this application.
-     * Application modules provide a way to modularize and extend the application's functionality.
-     * Modules must be registered before the application starts running.
+     * Registers an application module with this application. Application modules provide a way to modularize and extend
+     * the application's functionality. Modules must be registered before the application starts running.
      *
      * @param applicationModule the module to register with this application
      * @return the current {@code Application} instance, allowing for method chaining
@@ -309,10 +281,9 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     }
 
     /**
-     * Registers a controller object with this application.
-     * The controller's methods annotated with routing annotations (e.g., @GET, @POST) will be
-     * automatically mapped to corresponding HTTP routes.
-     * Protected routes require authentication before they can be accessed.
+     * Registers a controller object with this application. The controller's methods annotated with routing annotations
+     * (e.g., @GET, @POST) will be automatically mapped to corresponding HTTP routes. Protected routes require
+     * authentication before they can be accessed.
      *
      * @param controller      the controller object containing route handler methods
      * @param protectedRoutes array of URL patterns for routes that require authentication
@@ -323,9 +294,38 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
         Objects.requireNonNull(controller);
         if (isRunning())
             throw new IllegalStateException("Cannot register controller after application has started");
-        ApplicationModule<?> applicationModule = new ApplicationModule<>(controller, protectedRoutes) {};
+        ApplicationModule<?> applicationModule = new ApplicationModule<>(controller, protectedRoutes) {
+        };
         applicationModule.setApplication(this);
         applicationModules.add(applicationModule);
+        return this;
+    }
+
+    public TemplateEngine getTemplateEngine() {
+        return templateEngine;
+    }
+
+    /**
+     * Create a  {@code TemplateEngine} and associates it with the application
+     *
+     * @param type type of TemplateEngine to create
+     * @return the current {@code Application} instance, allowing for method chaining
+     */
+    public Application templateEngine(TemplateEngineFactory.Type type) {
+        return templateEngine(type, null);
+    }
+
+    /**
+     * Create a  {@code TemplateEngine} and associates it with the application
+     *
+     * @param type         type of TemplateEngine to create
+     * @param configurator optional configurator used to customize created TemplateEngine
+     * @return the current {@code Application} instance, allowing for method chaining
+     */
+    public Application templateEngine(TemplateEngineFactory.Type type, BiConsumer<TemplateEngine, TemplateEngineFactory.Type> configurator) {
+        this.templateEngineType = type;
+        this.templateEngineConfigurator = configurator;
+
         return this;
     }
 
@@ -341,8 +341,8 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     }
 
     /**
-     * Stops the application and closes the Vert.x instance.
-     * If the application is not running, a warning message will be logged.
+     * Stops the application and closes the Vert.x instance. If the application is not running, a warning message will
+     * be logged.
      */
     public void stop() {
         if (vertx != null) {
@@ -430,38 +430,37 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     }
 
     /**
-     * Returns the Vert.x instance associated with this application.
-     * This instance can be used to access Vert.x functionality directly.
+     * Returns the Vert.x instance associated with this application. This instance can be used to access Vert.x
+     * functionality directly.
      *
-     * @return the {@link Vertx} instance used by this application, or {@code null} if the application hasn't been started
+     * @return the {@link Vertx} instance used by this application, or {@code null} if the application hasn't been
+     * started
      */
     public Vertx getVertx() {
         return vertx;
     }
 
     /**
-     * Returns any failure that occurred during the execution of the completion handler.
-     * This method can be used to check if there were any errors when the application
-     * completed its startup process.
+     * Returns any failure that occurred during the execution of the completion handler. This method can be used to
+     * check if there were any errors when the application completed its startup process.
      *
-     * @return the {@code Throwable} that occurred during completion handler execution, or {@code null} if no error occurred
+     * @return the {@code Throwable} that occurred during completion handler execution, or {@code null} if no error
+     * occurred
      */
     public Throwable getCompletionHandlerFailure() {
         return completionHandlerFailure;
     }
 
-
     /**
-     * Handles any failures that occurred during the execution of the completion handler.
-     * If a completion handler failure exists, this method will throw the appropriate exception:
-     * - If the failure's cause is an {@code AssertionError}, it throws the cause
-     * - Otherwise, it throws the completion handler failure itself
+     * Handles any failures that occurred during the execution of the completion handler. If a completion handler
+     * failure exists, this method will throw the appropriate exception: - If the failure's cause is an
+     * {@code AssertionError}, it throws the cause - Otherwise, it throws the completion handler failure itself
      * <p>
-     * This method is particularly useful for testing scenarios where you need to propagate
-     * assertion failures from the completion handler to the test method.
+     * This method is particularly useful for testing scenarios where you need to propagate assertion failures from the
+     * completion handler to the test method.
      *
-     * @throws Throwable if a completion handler failure occurred, either the original failure
-     *                   or its cause in case of AssertionError
+     * @throws Throwable if a completion handler failure occurred, either the original failure or its cause in case of
+     *                   AssertionError
      */
     public void handleCompletionHandlerFailure() throws Throwable {
         // required to let the completion handler store completionHandlerFailure if any
@@ -474,8 +473,6 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
                 throw getCompletionHandlerFailure();
         }
     }
-
-    private final Object waitLock = new Object();
 
     private void stopWaiting() {
         synchronized (waitLock) {
@@ -499,8 +496,8 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     }
 
     /**
-     * Starts a console input loop that waits for user commands.
-     * The application can be gracefully stopped by entering 'exit'.
+     * Starts a console input loop that waits for user commands. The application can be gracefully stopped by entering
+     * 'exit'.
      */
     public void waitForInput() {
         readInput = true;
@@ -518,8 +515,6 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
         inputThread.setDaemon(true);
         inputThread.start();
     }
-
-    private static final Object shutdownLock= new Object();
 
     private void createHttpServer(Promise<Void> startPromise, Router router, int port) {
         HttpServerOptions options = new HttpServerOptions();
@@ -563,5 +558,40 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
                         stopWaiting();
                     }
                 });
+    }
+
+    class ApplicationVerticle extends AbstractVerticle {
+        @Override
+        public void start(Promise<Void> startPromise) {
+            if (templateEngineType != TemplateEngineFactory.Type.UNKNOWN)
+                templateEngine = TemplateEngineFactory.createTemplateEngine(vertx,
+                        templateEngineType, templateEngineConfigurator);
+
+            Router router = Router.router(vertx);
+
+            router.route().handler(BodyHandler.create());
+
+            if (jwtSecret != null) {
+                for (ApplicationModule<?> applicationModule : applicationModules) {
+                    for (String protectedRoute : applicationModule.getProtectedRoutes())
+                        EasyRouting.applyJWTAuth(vertx, router, protectedRoute, jwtSecret);
+                }
+
+                if (protectedRoutes != null) {
+                    for (String protectedRoute : protectedRoutes)
+                        EasyRouting.applyJWTAuth(vertx, router, protectedRoute, jwtSecret);
+                }
+            }
+
+            for (ApplicationModule<?> applicationModule : applicationModules)
+                applicationModule.setupController(router);
+
+            EasyRouting.setupController(router, Application.this, getTemplateEngine());
+            new RpcController(Application.this).setupController(router);
+
+            createHttpServer(startPromise, router, port);
+
+            startedImpl();
+        }
     }
 }

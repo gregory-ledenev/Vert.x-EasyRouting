@@ -27,18 +27,19 @@ package com.gl.vertx.easyrouting;
 import com.gl.vertx.easyrouting.annotations.FileFromFolder;
 import com.gl.vertx.easyrouting.annotations.FileFromResource;
 import com.gl.vertx.easyrouting.annotations.NotNullResult;
+import com.gl.vertx.easyrouting.annotations.Template;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.MimeMapping;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.FileUpload;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.common.template.TemplateEngine;
 import io.vertx.ext.web.handler.HttpException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.net.FileNameMap;
@@ -60,25 +61,69 @@ import static com.gl.vertx.easyrouting.EasyRouting.REDIRECT;
  * @param <T> The type of the result value
  */
 public class Result<T> {
-    private static final Logger logger = LoggerFactory.getLogger(Result.class);
-
     public static final String CONTENT_TYPE = "content-type";
     public static final String CONTENT_DISPOSITION = "content-disposition";
-
     public static final String CT_TEXT_PLAIN = "text/plain";
     public static final String CT_TEXT_HTML = "text/html";
     public static final String CT_APPLICATION_JSON = "application/json";
     public static final String CT_APPLICATION_OCTET_STREAM = "application/octet-stream";
-    static final String INDEX_HTML = "index.html";
     public static final String ROOT_PATH = "/";
     public static final String PARENT_PATH = "..";
-
+    static final String INDEX_HTML = "index.html";
+    private static final Logger logger = LoggerFactory.getLogger(Result.class);
     private T result;
     private Map<String, String> headers = new HashMap<>();
     private int statusCode;
     private Annotation[] annotations;
     private Class<?> resultClass;
     private BiConsumer<Result<T>, RoutingContext> handler;
+
+    private TemplateEngine templateEngine;
+
+    /**
+     * Constructs a HandlerResult with a result value and default status code 200.
+     *
+     * @param result The result value
+     */
+    public Result(T result) {
+        this.result = result;
+        this.statusCode = 200;
+    }
+
+    /**
+     * Constructs a HandlerResult with a result value, headers, and status code.
+     *
+     * @param result     The result value
+     * @param headers    The HTTP headers to include in the response
+     * @param statusCode The HTTP status code
+     */
+    public Result(T result, Map<String, String> headers, int statusCode) {
+        this.result = result;
+        if (headers != null)
+            this.headers = headers;
+        this.statusCode = statusCode;
+    }
+
+    /**
+     * Constructs a HandlerResult with a result value and headers.
+     *
+     * @param result  The result value
+     * @param headers The HTTP headers to include in the response
+     */
+    public Result(T result, Map<String, String> headers) {
+        this(result, headers, 200);
+    }
+
+    /**
+     * Constructs a HandlerResult with a result value and status code.
+     *
+     * @param result     The result value
+     * @param statusCode The HTTP status code
+     */
+    public Result(T result, int statusCode) {
+        this.result = result;
+        this.statusCode = statusCode;
+    }
 
     /**
      * Creates a HandlerResult for sending plain text content.
@@ -115,9 +160,9 @@ public class Result<T> {
     /**
      * Creates a HandlerResult that saves uploaded files and performs a redirect.
      *
-     * @param files List of file uploads to process
-     * @param toFolder    The destination folder for uploaded files
-     * @param redirect    The URL to redirect to after saving files
+     * @param files    List of file uploads to process
+     * @param toFolder The destination folder for uploaded files
+     * @param redirect The URL to redirect to after saving files
      * @return HandlerResult configured for file saving and redirect
      */
     public static Result<String> saveFiles(List<FileUpload> files, String toFolder, String redirect) {
@@ -144,18 +189,16 @@ public class Result<T> {
     }
 
     /**
-     * Saves a list of uploaded files using a provided file-saving function and performs a redirect.
-     * Each file upload in the list is passed to the provided file-saving function, which is
-     * responsible for handling the file-saving logic. If the save operation is successful,
-     * the uploaded file is deleted. If an error occurs during saving, an appropriate response
-     * is sent to indicate failure.
+     * Saves a list of uploaded files using a provided file-saving function and performs a redirect. Each file upload in
+     * the list is passed to the provided file-saving function, which is responsible for handling the file-saving logic.
+     * If the save operation is successful, the uploaded file is deleted. If an error occurs during saving, an
+     * appropriate response is sent to indicate failure.
      *
-     * @param files       The list of uploaded files to save.
-     * @param fileSaver   A function that performs the file-saving operation.
-     *                    It takes a {@code Path} representing the uploaded file's path
-     *                    and a {@code String} representing the file's name, and returns
-     *                    a {@code Boolean} indicating success or failure.
-     * @param redirect    The URL to redirect to after processing the files.
+     * @param files     The list of uploaded files to save.
+     * @param fileSaver A function that performs the file-saving operation. It takes a {@code Path} representing the
+     *                  uploaded file's path and a {@code String} representing the file's name, and returns a
+     *                  {@code Boolean} indicating success or failure.
+     * @param redirect  The URL to redirect to after processing the files.
      * @return A {@code Result<String>} that handles the file-saving process and subsequent redirect.
      */
     public static Result<String> saveFiles(List<FileUpload> files, BiFunction<Path, String, Boolean> fileSaver, String redirect) {
@@ -166,7 +209,7 @@ public class Result<T> {
             for (FileUpload fileUpload : files) {
                 String uploadedFileName = fileUpload.uploadedFileName();
                 String fileName = fileUpload.fileName();
-                if (! fileName.isEmpty()) {
+                if (!fileName.isEmpty()) {
                     boolean saved;
                     try {
                         saved = fileSaver.apply(Path.of(uploadedFileName), fileName);
@@ -221,14 +264,13 @@ public class Result<T> {
     }
 
     /**
-     * Creates a HandlerResult for sending a file from a class resource. This method attempts to load
-     * a file from the resources associated with the specified class. If the requested name is "/",
-     * it defaults to "index.html".
+     * Creates a HandlerResult for sending a file from a class resource. This method attempts to load a file from the
+     * resources associated with the specified class. If the requested name is "/", it defaults to "index.html".
      *
      * @param clazz The class used to locate the resource
      * @param name  The name/path of the resource to load
-     * @return HandlerResult configured for file response. Returns 403 status if path contains "..",
-     * 404 status if file not found, or file content if successful
+     * @return HandlerResult configured for file response. Returns 403 status if path contains "..", 404 status if file
+     * not found, or file content if successful
      */
     public static Result<String> fileFromResource(Class<?> clazz, String name) {
         Objects.requireNonNull(clazz);
@@ -254,15 +296,15 @@ public class Result<T> {
     }
 
     /**
-     * Creates a HandlerResult for sending a file from a specified folder. This method attempts to load
-     * a file from the given folder path. If the requested name is "/", it defaults to "index.html".
+     * Creates a HandlerResult for sending a file from a specified folder. This method attempts to load a file from the
+     * given folder path. If the requested name is "/", it defaults to "index.html".
      *
      * @param folder The base folder path where the file should be loaded from
      * @param name   The name/path of the file to load
-     * @return HandlerResult configured for file response. Returns 403 status if path contains "..",
-     * 404 status if file not found, or file content if successful
+     * @return HandlerResult configured for file response. Returns 403 status if path contains "..", 404 status if file
+     * not found, or file content if successful
      */
-    public static Result<String> fileFromFolder(Path folder, String name) {
+    public static Result<?> fileFromFolder(Path folder, String name, TemplateEngine templateEngine) {
         Objects.requireNonNull(folder);
         Objects.requireNonNull(name);
 
@@ -277,18 +319,35 @@ public class Result<T> {
 
         Path filePath = folder.resolve(file);
         try {
-            if (Files.exists(filePath))
-                return Result.file(Files.readString(filePath), file);
-            else
+            if (Files.exists(filePath)) {
+                if (templateEngine == null)
+                    return Result.file(Files.readString(filePath), file);
+                else
+                    return new Result<>(filePath) {
+                        @Override
+                        public void defaultHandle(RoutingContext ctx) {
+                            templateEngine.render(ctx.data(), filePath.toAbsolutePath().toString()).
+                                    onComplete((buffer, ex) -> {
+                                        if (ex == null) {
+                                            Result.file(buffer.toString(), file).defaultHandle(ctx);
+                                        } else {
+                                            ctx.response().setStatusCode(500).end("Failed to process template: " + filePath + ex.getMessage());
+                                            logger.error("Failed to process template: " + filePath, ex);
+                                        }
+                                    });
+                        }
+                    };
+            } else {
                 return fileNotFound(file);
+            }
         } catch (IOException e) {
             return failedToReadFile(file);
         }
     }
 
     /**
-     * Creates a HandlerResult that performs a redirect to the specified location.
-     * This method creates a response that will redirect the client to a new URL.
+     * Creates a HandlerResult that performs a redirect to the specified location. This method creates a response that
+     * will redirect the client to a new URL.
      *
      * @param location The URL or path to redirect to
      * @return HandlerResult configured for redirect response
@@ -308,9 +367,8 @@ public class Result<T> {
     }
 
     /**
-     * Creates a HandlerResult for an invalid login attempt.
-     * This method returns a HandlerResult with a 401 (Unauthorized) status code
-     * and an appropriate error message.
+     * Creates a HandlerResult for an invalid login attempt. This method returns a HandlerResult with a 401
+     * (Unauthorized) status code and an appropriate error message.
      *
      * @return HandlerResult configured with error message and 401 status code
      */
@@ -327,6 +385,7 @@ public class Result<T> {
     public static Result<String> fileNotFound(String file) {
         return new Result<>("File not found: " + file, 404);
     }
+
     /**
      * Creates a HandlerResult for sending a file from a Path.
      *
@@ -337,84 +396,47 @@ public class Result<T> {
         return new Result<>(filePath);
     }
 
-
     /**
-     * Determines the MIME type of file based on its name.
-     * If the MIME type cannot be determined, it defaults to "application/octet-stream".
+     * Determines the MIME type of file based on its name. If the MIME type cannot be determined, it defaults to
+     * "application/octet-stream".
      *
      * @param fileName The name of the file
      * @return The MIME type of the file
      */
     public static String getMimeType(String fileName) {
         FileNameMap fileNameMap = URLConnection.getFileNameMap();
-            String mimeType = MimeMapping.mimeTypeForFilename(fileName);
+        String mimeType = MimeMapping.mimeTypeForFilename(fileName);
         if (mimeType == null)
             mimeType = CT_APPLICATION_OCTET_STREAM;
 
         return mimeType;
     }
 
-    /**
-     * Constructs a HandlerResult with a result value and default status code 200.
-     *
-     * @param result The result value
-     */
-    public Result(T result) {
-        this.result = result;
-        this.statusCode = 200;
+    public boolean isProcessTemplate() {
+        return templateEngine != null;
+    }
+
+    public TemplateEngine getTemplateEngine() {
+        return templateEngine;
+    }
+
+    void setTemplateEngine(TemplateEngine aTemplateEngine) {
+        templateEngine = aTemplateEngine;
     }
 
     /**
-     * Constructs a HandlerResult with a result value, headers, and status code.
+     * Sets a custom handler for processing the result. This allows for custom handling logic to be applied when
+     * processing the result instead of using the default handling behavior. Handler can end response either: <br> - by
+     * calling the {@code ctx.response().end()} method, or <br> - by calling the {@code defaultHandle(RoutingContext)}
+     * method, <br> otherwise {@code defaultHandle(RoutingContext)} will be called automatically
+     * <p>TIP: if needed to continue processing with the default handler - call the
+     * {@code defaultHandle(RoutingContext)} method.
      *
-     * @param result     The result value
-     * @param headers    The HTTP headers to include in the response
-     * @param statusCode The HTTP status code
-     */
-    public Result(T result, Map<String, String> headers, int statusCode) {
-        this.result = result;
-        if (headers != null)
-            this.headers = headers;
-        this.statusCode = statusCode;
-    }
-
-    /**
-     * Constructs a HandlerResult with a result value and headers.
-     *
-     * @param result  The result value
-     * @param headers The HTTP headers to include in the response
-     */
-    public Result(T result, Map<String, String> headers) {
-        this(result, headers, 200);
-    }
-
-    /**
-     * Constructs a HandlerResult with a result value and status code.
-     *
-     * @param result     The result value
-     * @param statusCode The HTTP status code
-     */
-    public Result(T result, int statusCode) {
-        this.result = result;
-        this.statusCode = statusCode;
-    }
-
-
-    /**
-     * Sets a custom handler for processing the result. This allows for custom handling logic
-     * to be applied when processing the result instead of using the default handling behavior. Handler can end
-     * response either: <br>
-     * - by calling the {@code ctx.response().end()} method, or <br>
-     * - by calling the {@code defaultHandle(RoutingContext)} method, <br>
-     * otherwise {@code defaultHandle(RoutingContext)} will be called automatically
-     * <p>TIP: if needed to continue processing with the default handler - call the {@code defaultHandle(RoutingContext)}
-     * method.
-     *
-     * @param handler A BiConsumer that takes this Result instance and a RoutingContext as parameters
-     *                and defines custom handling logic
+     * @param handler A BiConsumer that takes this Result instance and a RoutingContext as parameters and defines custom
+     *                handling logic
      * @return This Result instance for method chaining
      */
-    public Result<T>  handler(BiConsumer<Result<T>, RoutingContext> handler) {
+    public Result<T> handler(BiConsumer<Result<T>, RoutingContext> handler) {
         this.handler = handler;
         return this;
     }
@@ -448,21 +470,21 @@ public class Result<T> {
     }
 
     /**
-     * Sets the HTTP status code.
-     *
-     * @param statusCode The HTTP status code to set
-     */
-    public void setStatusCode(int statusCode) {
-        this.statusCode = statusCode;
-    }
-
-    /**
      * Gets the HTTP status code.
      *
      * @return The HTTP status code
      */
     public int getStatusCode() {
         return statusCode;
+    }
+
+    /**
+     * Sets the HTTP status code.
+     *
+     * @param statusCode The HTTP status code to set
+     */
+    public void setStatusCode(int statusCode) {
+        this.statusCode = statusCode;
     }
 
     /**
@@ -478,7 +500,7 @@ public class Result<T> {
     protected final void handle(RoutingContext ctx) {
         if (handler != null) {
             handler.accept(this, ctx);
-            if (! ctx.response().ended())
+            if (!ctx.response().ended())
                 defaultHandle(ctx);
         } else {
             defaultHandle(ctx);
@@ -486,16 +508,12 @@ public class Result<T> {
     }
 
     /**
-     * Performs default handling of the result based on its type and sends the appropriate HTTP response.
-     * This method processes different types of results and configures the response accordingly:
-     * - Path: Sends a file as attachment
-     * - Buffer: Sends binary data
-     * - JsonObject/JsonArray: Sends JSON response
-     * - Map: Converts to JSON and sends
-     * - Collection/Array: Converts to JSON array and sends
-     * - Number/Boolean: Sends as plain text
-     * - String: Handles as HTML, redirect, or file based on content and annotations
-     * - Other objects: Attempts to convert to JSON or falls back to toString()
+     * Performs default handling of the result based on its type and sends the appropriate HTTP response. This method
+     * processes different types of results and configures the response accordingly: - Path: Sends a file as attachment
+     * - Buffer: Sends binary data - JsonObject/JsonArray: Sends JSON response - Map: Converts to JSON and sends -
+     * Collection/Array: Converts to JSON array and sends - Number/Boolean: Sends as plain text - String: Handles as
+     * HTML, redirect, or file based on content and annotations - Other objects: Attempts to convert to JSON or falls
+     * back to toString()
      *
      * @param ctx The Vert.x routing context to handle the response
      * @throws HttpException if there's an error during response processing
@@ -537,10 +555,10 @@ public class Result<T> {
                     handleOtherResult(ctx, result);
                 }
             }
-        } catch(HttpException e){
+        } catch (HttpException e) {
             logger.error("Error sending result: ", e);
             ctx.response().setStatusCode(e.getStatusCode()).end(e.getMessage());
-        } catch(Exception e){
+        } catch (Exception e) {
             logger.error("Error handling result: ", e);
             ctx.response().setStatusCode(500).end();
         }
@@ -596,24 +614,34 @@ public class Result<T> {
             String redirectPath = string.substring(REDIRECT.length());
             ctx.redirect(redirectPath);
         } else {
+
             if (annotations != null) {
+                boolean processTemplate = false;
+                for (Annotation annotation : annotations) {
+                    if (annotation instanceof Template) {
+                        processTemplate = true;
+                        break;
+                    }
+                }
                 for (Annotation annotation : annotations) {
                     if (annotation instanceof FileFromResource fileFromResource) {
                         Result.fileFromResource(fileFromResource.value(), string).handle(ctx);
                         return;
                     } else if (annotation instanceof FileFromFolder fileFromFolder) {
-                        Result.fileFromFolder(Path.of(fileFromFolder.value()), string).handle(ctx);
+                        String mimeType = getMimeType(string);
+                        if (CT_TEXT_HTML.equals(mimeType) && processTemplate && templateEngine == null) {
+                            logger.error("Skipped processing template: " + string + " No template engine registered with the app.");
+                            processTemplate = false;
+                        }
+                        Result.fileFromFolder(Path.of(fileFromFolder.value()), string, processTemplate ? templateEngine : null).handle(ctx);
                         return;
                     }
                 }
             }
 
-            if (! ctx.response().headers().contains(CONTENT_TYPE))
-                ctx.response()
-                        .putHeader(CONTENT_TYPE, CT_TEXT_HTML)
-                        .end(string);
-            else
-                ctx.response().end(string);
+            if (!ctx.response().headers().contains(CONTENT_TYPE))
+                ctx.response().putHeader(CONTENT_TYPE, CT_TEXT_HTML);
+            ctx.end(string);
         }
     }
 

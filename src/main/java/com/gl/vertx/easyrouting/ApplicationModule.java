@@ -124,7 +124,7 @@ public abstract class ApplicationModule<T extends Application>
      */
     public void setupController(Router router) {
         Object target = controller != null ? controller : this;
-        EasyRouting.setupController(router, target);
+        EasyRouting.setupController(router, target, getApplication().getTemplateEngine());
         new RpcController(target).setupController(router);
     }
 

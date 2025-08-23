@@ -5,7 +5,7 @@
 
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.8</version>
+    <version>0.9.9</version>
 
     <name>EasyRouting for Vert.x</name>
     <description>
@@ -58,6 +58,11 @@
         <dependency>
             <groupId>io.vertx</groupId>
             <artifactId>vertx-web-client</artifactId>
+            <version>5.0.3</version>
+        </dependency>
+        <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-web-templ-thymeleaf</artifactId>
             <version>5.0.3</version>
         </dependency>
         <dependency>

@@ -5,6 +5,7 @@ import com.gl.vertx.easyrouting.annotations.*;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 
@@ -69,6 +70,7 @@ public class UserAdminApplication extends Application {
     public static void main(String[] args) {
         UserAdminApplication userAdminApplication = new UserAdminApplication(new LoginService(), new UserService()).
                 module(new UserApplicationModule("/api/*")).
+                templateEngine(TemplateEngineFactory.Type.Thymeleaf).
                 jwtAuth(JWT_SECRET).
                 sslWithJks("keystore", "1234567890").
                 handleShutdown().
@@ -85,8 +87,10 @@ public class UserAdminApplication extends Application {
         return loginService.login(loginData.username(), loginData.password());
     }
 
-    @GET("/*") @FileFromResource(UserAdminApplication.class)
-    String get(@PathParam("path") String path) {
+    @GET("/*")
+    @Template @FileFromFolder("documents")
+    String get(@PathParam("path") String path, TemplateModel templateModel) {
+        templateModel.put("title", "SOME CUSTOM TITLE");
         return path;
     }
 

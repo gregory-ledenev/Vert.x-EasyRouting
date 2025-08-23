@@ -38,11 +38,12 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Route;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.common.template.TemplateEngine;
 import io.vertx.ext.web.handler.HttpException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.annotation.*;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -50,29 +51,28 @@ import java.text.MessageFormat;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 import static com.gl.vertx.easyrouting.JWTUtil.ROLES;
 import static com.gl.vertx.easyrouting.Result.CONTENT_TYPE;
 import static com.gl.vertx.easyrouting.Result.CT_APPLICATION_JSON;
+import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 
 /**
  * EasyRouting provides annotation-based HTTP request handling for Vert.x web applications. It simplifies route
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
- * @version 0.9.8
- * @since 0.9.8
+ *
+ * @version 0.9.9
+ * @since 0.9.9
  */
 public class EasyRouting {
     /**
      * Current version of the EasyRouting library.
      */
-    public static final String VERSION = "0.9.8";
-
-
-    private static final Logger logger = LoggerFactory.getLogger(EasyRouting.class);
-
+    public static final String VERSION = "0.9.9";
     public static final String REDIRECT = "redirect:";
+    private static final Logger logger = LoggerFactory.getLogger(EasyRouting.class);
     private static final String ERROR_HANDLING_ANNOTATED_METHOD = "Error handling annotated method: {0}({1}). Error: {2}";
+    private static final String KEY_RPC_REQUEST = "rpcRequest";
 
     /**
      * Sets up HTTP request handlers for all supported HTTP methods (GET, POST, DELETE, PUT, PATCH) based on annotated
@@ -81,14 +81,14 @@ public class EasyRouting {
      * @param router the Vert.x Router instance to configure
      * @param target the object containing annotated handler methods
      */
-    public static void setupController(Router router, Object target) {
+    public static void setupController(Router router, Object target, TemplateEngine templateEngine) {
         Objects.requireNonNull(router);
         Objects.requireNonNull(target);
-        setupController(router, GET.class, target);
-        setupController(router, POST.class, target);
-        setupController(router, DELETE.class, target);
-        setupController(router, PUT.class, target);
-        setupController(router, PATCH.class, target);
+        setupController(router, GET.class, target, templateEngine);
+        setupController(router, POST.class, target, templateEngine);
+        setupController(router, DELETE.class, target, templateEngine);
+        setupController(router, PUT.class, target, templateEngine);
+        setupController(router, PATCH.class, target, templateEngine);
 
         setupFailureHandler(router, target);
 
@@ -103,17 +103,16 @@ public class EasyRouting {
     }
 
     /**
-     * Applies JWT authentication with the common "HS256" algorithm to a specified route in the given router.
-     * Sample use would be as simple as:<br><br>
-     * {@code JWTUtil.applyAuth(vertx, router, "/api/*", "very long password");}
+     * Applies JWT authentication with the common "HS256" algorithm to a specified route in the given router. Sample use
+     * would be as simple as:<br><br> {@code JWTUtil.applyAuth(vertx, router, "/api/*", "very long password");}
      * <br><br>
-     * that applies JWT authentication to all routes
-     * starting with "/api/".
+     * that applies JWT authentication to all routes starting with "/api/".
      *
-     * @param vertx      the Vert.x instance
-     * @param router     the router to which the route will be added
-     * @param path       the path for which JWT authentication should be applied
-     * @param jwtSecret  the secret key used for signing JWT tokens. It can be a plain password or a string in PEM format
+     * @param vertx     the Vert.x instance
+     * @param router    the router to which the route will be added
+     * @param path      the path for which JWT authentication should be applied
+     * @param jwtSecret the secret key used for signing JWT tokens. It can be a plain password or a string in PEM
+     *                  format
      * @return the created route with JWT authentication applied
      */
     @SuppressWarnings("UnusedReturnValue")
@@ -246,10 +245,10 @@ public class EasyRouting {
         return count;
     }
 
-    private static void setupRpcRequestsHandler(Router router, Object target) {
+    private static void setupRpcRequestsHandler(Router router, Object target, TemplateEngine templateEngine) {
         Rpc rpc = target.getClass().getAnnotation(Rpc.class);
         if (rpc != null) {
-            router.post(rpc.path()).handler(createHandler(rpc, target));
+            router.post(rpc.path()).handler(createHandler(rpc, target, templateEngine));
         }
     }
 
@@ -260,7 +259,7 @@ public class EasyRouting {
      * @param annotationClass the HTTP method annotation class to process
      * @param target          the object containing annotated handler methods
      */
-    private static void setupController(Router router, Class<? extends Annotation> annotationClass, Object target) {
+    private static void setupController(Router router, Class<? extends Annotation> annotationClass, Object target, TemplateEngine templateEngine) {
         Set<String> installedHandlers = new HashSet<>();
 
         try {
@@ -277,15 +276,15 @@ public class EasyRouting {
                         installedHandlers.add(installedHandlerKey);
 
                         if (annotationClass == GET.class)
-                            router.get(path).handler(createHandler(annotation, target));
+                            router.get(path).handler(createHandler(annotation, target, templateEngine));
                         else if (annotationClass == POST.class)
-                            router.post(path).handler(createHandler(annotation, target));
+                            router.post(path).handler(createHandler(annotation, target, templateEngine));
                         else if (annotationClass == DELETE.class)
-                            router.delete(path).handler(createHandler(annotation, target));
+                            router.delete(path).handler(createHandler(annotation, target, templateEngine));
                         else if (annotationClass == PUT.class)
-                            router.put(path).handler(createHandler(annotation, target));
+                            router.put(path).handler(createHandler(annotation, target, templateEngine));
                         else if (annotationClass == PATCH.class)
-                            router.patch(path).handler(createHandler(annotation, target));
+                            router.patch(path).handler(createHandler(annotation, target, templateEngine));
                     }
                 }
             }
@@ -311,21 +310,131 @@ public class EasyRouting {
         return result;
     }
 
-    private static Handler<RoutingContext> createHandler(Annotation annotation, Object target) {
-        return new RoutingContextHandler(annotation, target);
+    private static Handler<RoutingContext> createHandler(Annotation annotation, Object target, TemplateEngine templateEngine) {
+        return new RoutingContextHandler(annotation, target, templateEngine);
     }
 
-    private static final String KEY_RPC_REQUEST = "rpcRequest";
+    /**
+     * Interface for classes that hold and manage {@link AnnotatedConverters}. Implementing classes can provide access
+     * to their converter collection, allowing for centralized converter management and reuse.
+     */
+    public interface AnnotatedConvertersHolder {
+        /**
+         * Gets the AnnotatedConverters instance associated with this holder.
+         *
+         * @return the AnnotatedConverters instance
+         */
+        AnnotatedConverters getAnnotatedConverters();
+    }
 
     protected static class RoutingContextHandler implements Handler<RoutingContext> {
+        private static boolean warnedAboutMissingParameterNames = false;
         private final Annotation annotation;
         private final Object target;
         private final AnnotatedConverters annotatedConverters;
+        private final TemplateEngine templateEngine;
 
-        public RoutingContextHandler(Annotation annotation, Object target) {
+        public RoutingContextHandler(Annotation annotation, Object target, TemplateEngine templateEngine) {
             this.annotation = annotation;
             this.target = target;
+            this.templateEngine = templateEngine;
             this.annotatedConverters = setupAnnotatedConverters(target);
+        }
+
+        private static void errorHandlerInvocation(Annotation annotation, Set<String> parameterNames, Exception exception) {
+            logger.error(MessageFormat.format(ERROR_HANDLING_ANNOTATED_METHOD,
+                    annotation,
+                    String.join(", ", parameterNames),
+                    exception));
+        }
+
+        private static void decomposeJsonBody(RoutingContext ctx, Method method, MultiMap requestParameters) {
+            if (CT_APPLICATION_JSON.equalsIgnoreCase(ctx.request().headers().get(CONTENT_TYPE))) {
+                if (method.getAnnotation(DecomposeBody.class) != null) {
+                    JsonObject jsonBody = ctx.body().asJsonObject();
+                    for (Map.Entry<String, Object> entry : jsonBody) {
+                        requestParameters.add(entry.getKey(), entry.getValue().toString());
+                    }
+                }
+            }
+        }
+
+        static Object convertValue(Object value, Type to) {
+            Class<?> classTo;
+            Type elementType = null;
+
+            if (to instanceof ParameterizedType parameterizedType) {
+                classTo = (Class<?>) parameterizedType.getRawType();
+                if (parameterizedType.getActualTypeArguments().length > 0)
+                    elementType = parameterizedType.getActualTypeArguments()[0];
+            } else {
+                classTo = (Class<?>) to;
+            }
+
+            if (!classTo.isArray() &&
+                    !classTo.isAssignableFrom(List.class) &&
+                    !classTo.isAssignableFrom(Map.class) &&
+                    classTo.isAssignableFrom(value.getClass()))
+                return value; // No conversion needed
+
+            if (to == String.class) {
+                return value.toString();
+            } else if (to == JsonObject.class) {
+                return value instanceof JsonObject jsonObject ? jsonObject : new JsonObject(value.toString());
+            } else if (to == JsonArray.class) {
+                return value instanceof JsonArray jsonArray ? jsonArray : new JsonArray(value.toString());
+            } else if (to == Integer.class || to == int.class) {
+                return Integer.parseInt(value.toString());
+            } else if (to == Long.class || to == long.class) {
+                return Long.parseLong(value.toString());
+            } else if (to == Double.class || to == double.class) {
+                return Double.parseDouble(value.toString());
+            } else if (to == Boolean.class || to == boolean.class) {
+                return Boolean.parseBoolean(value.toString());
+            } else if (to == Buffer.class) {
+                return value instanceof Buffer buffer ? buffer : Buffer.buffer(value.toString());
+            } else if (!classTo.isPrimitive()) {
+                try {
+                    JsonMapper jsonMapper = new JsonMapper();
+                    if (value instanceof Map || value instanceof List || value instanceof JsonObject || value instanceof JsonArray) {
+                        if (elementType != null) {
+                            if (value instanceof List) {
+                                final Class<?> elementClass = (Class<?>) elementType;
+                                return ((List<?>) value).stream()
+                                        .map(v -> jsonMapper.convertValue(v, elementClass))
+                                        .collect(Collectors.toList());
+
+                            }
+                        } else {
+                            return jsonMapper.convertValue(value, classTo);
+                        }
+                    } else if (value instanceof String || value instanceof Buffer) {
+                        return jsonMapper.readValue(value.toString(), classTo);
+                    }
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("Failed to convert value to " + classTo.getName(), e);
+                }
+                return value;
+            }
+
+            throw new IllegalArgumentException("Unsupported value type: " + to);
+        }
+
+        private static void applyHttpHeaders(Method method, Result<?> handlerResult) {
+            HttpHeaders headers = method.getAnnotation(HttpHeaders.class);
+            if (headers != null) {
+                for (HttpHeader header : headers.value()) {
+                    String[] headerParts = header.value().split(":");
+                    if (headerParts.length == 2)
+                        handlerResult.putHeader(headerParts[0].trim(), headerParts[1].trim());
+                    else
+                        logger.warn("Invalid header definition: " + header.value());
+                }
+            }
+
+            ContentType contentType = method.getAnnotation(ContentType.class);
+            if (contentType != null)
+                handlerResult.putHeader(CONTENT_TYPE, contentType.value());
         }
 
         private void obtainRpcContext(RoutingContext ctx, Object target) throws RpcContext.RpcException {
@@ -428,7 +537,7 @@ public class EasyRouting {
                     });
                 } else {
                     Object result = handlerMethod.method().invoke(target, args);
-                    if (! ctx.response().ended())
+                    if (!ctx.response().ended())
                         processHandlerResult(handlerMethod.method(), ctx, result);
                 }
             } catch (Exception e) {
@@ -440,18 +549,6 @@ public class EasyRouting {
                 }
             }
         }
-
-        private static void errorHandlerInvocation(Annotation annotation, Set<String> parameterNames, Exception exception) {
-            logger.error(MessageFormat.format(ERROR_HANDLING_ANNOTATED_METHOD,
-                    annotation,
-                    String.join(", ", parameterNames),
-                    exception));
-        }
-
-        record MethodResult(Method method, String[] parameterNames, boolean hasBodyParam) {
-        }
-
-        private static boolean warnedAboutMissingParameterNames = false;
 
         private MethodResult getMethod(RoutingContext ctx, Annotation annotation) {
             Method[] declaredMethods = target.getClass().getDeclaredMethods();
@@ -473,7 +570,7 @@ public class EasyRouting {
             }
 
             for (Method method : declaredMethods) {
-                if (methodName != null && (! RpcContext.canExportMethod(method) || ! method.getName().equals(methodName)))
+                if (methodName != null && (!RpcContext.canExportMethod(method) || !method.getName().equals(methodName)))
                     continue;
 
                 Annotation methodAnnotation = annotation != null ? method.getAnnotation(annotation.annotationType()) : null;
@@ -538,8 +635,11 @@ public class EasyRouting {
                 } else if (parameter.getAnnotation(HeaderParam.class) != null) {
                     otherParamCount++;
                     paramNames.add(parameter.getName());
+                }  else if (parameter.getAnnotation(TemplateModelParam.class) != null || parameter.getType().equals(TemplateModel.class)) {
+                    otherParamCount++;
+                    paramNames.add(parameter.getName());
                 } else {
-                    if (parameter.getName().matches("arg\\d+") && ! warnedAboutMissingParameterNames) {
+                    if (parameter.getName().matches("arg\\d+") && !warnedAboutMissingParameterNames) {
                         warnedAboutMissingParameterNames = true;
                         logger.warn("Parameter names are missing. Either use @Param annotations or compile project with -parameters option");
                     }
@@ -594,6 +694,8 @@ public class EasyRouting {
                     result.add(cookie != null ? cookie.getValue() : null);
                 } else if (parameter.getAnnotation(HeaderParam.class) != null) {
                     result.add(ctx.request().getHeader(parameter.getAnnotation(HeaderParam.class).value()));
+                } else if (parameter.getAnnotation(TemplateModelParam.class) != null || parameter.getType().equals(TemplateModel.class)) {
+                    result.add(new TemplateModel(ctx));
                 } else if (parameter.getType().equals(RoutingContext.class) && parameter.getAnnotation(ContextParam.class) != null) {
                     result.add(ctx);
                 } else {
@@ -602,22 +704,11 @@ public class EasyRouting {
                             parameterNames[i],
                             parameterTypes[i],
                             requestParameters,
-                            param != null && ! param.defaultValue().equals(Param.UNSPECIFIED) ? param.defaultValue() : null));
+                            param != null && !param.defaultValue().equals(Param.UNSPECIFIED) ? param.defaultValue() : null));
                 }
             }
 
             return result.toArray(new Object[0]);
-        }
-
-        private static void decomposeJsonBody(RoutingContext ctx, Method method, MultiMap requestParameters) {
-            if (CT_APPLICATION_JSON.equalsIgnoreCase(ctx.request().headers().get(CONTENT_TYPE))) {
-                if (method.getAnnotation(DecomposeBody.class) != null) {
-                    JsonObject jsonBody = ctx.body().asJsonObject();
-                    for (Map.Entry<String, Object> entry : jsonBody) {
-                        requestParameters.add(entry.getKey(), entry.getValue().toString());
-                    }
-                }
-            }
         }
 
         private Object convertBody(String contentType, Type parameterType, Object body) {
@@ -626,67 +717,6 @@ public class EasyRouting {
             }
             Object convertedBody = convertFrom(contentType, parameterType, body);
             return convertValue(convertedBody, parameterType);
-        }
-
-        static Object convertValue(Object value, Type to) {
-            Class<?> classTo;
-            Type elementType = null;
-
-            if (to instanceof ParameterizedType parameterizedType) {
-                classTo = (Class<?>) parameterizedType.getRawType();
-                if (parameterizedType.getActualTypeArguments().length > 0)
-                    elementType = parameterizedType.getActualTypeArguments()[0];
-            } else {
-                classTo = (Class<?>) to;
-            }
-
-            if (! classTo.isArray() &&
-                    ! classTo.isAssignableFrom(List.class) &&
-                    ! classTo.isAssignableFrom(Map.class) &&
-                    classTo.isAssignableFrom(value.getClass()))
-                return value; // No conversion needed
-
-            if (to == String.class) {
-                return value.toString();
-            } else if (to == JsonObject.class) {
-                return value instanceof JsonObject jsonObject ? jsonObject : new JsonObject(value.toString());
-            } else if (to == JsonArray.class) {
-                return value instanceof JsonArray jsonArray ? jsonArray : new JsonArray(value.toString());
-            } else if (to == Integer.class || to == int.class) {
-                return Integer.parseInt(value.toString());
-            } else if (to == Long.class || to == long.class) {
-                return Long.parseLong(value.toString());
-            } else if (to == Double.class || to == double.class) {
-                return Double.parseDouble(value.toString());
-            } else if (to == Boolean.class || to == boolean.class) {
-                return Boolean.parseBoolean(value.toString());
-            } else if (to == Buffer.class) {
-                return value instanceof Buffer buffer ? buffer : Buffer.buffer(value.toString());
-            } else if (!classTo.isPrimitive()) {
-                try {
-                    JsonMapper jsonMapper = new JsonMapper();
-                    if (value instanceof Map || value instanceof List || value instanceof JsonObject || value instanceof JsonArray) {
-                        if (elementType != null) {
-                            if (value instanceof List) {
-                                final Class<?> elementClass = (Class<?>) elementType;
-                                return ((List<?>) value).stream()
-                                        .map(v -> jsonMapper.convertValue(v, elementClass))
-                                        .collect(Collectors.toList());
-
-                            }
-                        } else {
-                            return jsonMapper.convertValue(value, classTo);
-                        }
-                    } else if (value instanceof String) {
-                        return jsonMapper.readValue(value.toString(), classTo);
-                    }
-                } catch (Exception e) {
-                    throw new IllegalArgumentException("Failed to convert value to " + classTo.getName(), e);
-                }
-                return value;
-            }
-
-            throw new IllegalArgumentException("Unsupported value type: " + to);
         }
 
         private Object convertFrom(String contentType, Type type, Object value) {
@@ -716,6 +746,7 @@ public class EasyRouting {
                 handlerResult.setResultClass(convertedResult.getClass());
             }
 
+            handlerResult.setTemplateEngine(templateEngine);
             handlerResult.handle(ctx);
         }
 
@@ -728,43 +759,14 @@ public class EasyRouting {
             return convertedResult;
         }
 
-        private static void applyHttpHeaders(Method method, Result<?> handlerResult) {
-            HttpHeaders headers = method.getAnnotation(HttpHeaders.class);
-            if (headers != null) {
-                for (HttpHeader header : headers.value()) {
-                    String[] headerParts = header.value().split(":");
-                    if (headerParts.length == 2)
-                        handlerResult.putHeader(headerParts[0].trim(), headerParts[1].trim());
-                    else
-                        logger.warn("Invalid header definition: " + header.value());
-                }
-            }
-
-            ContentType contentType = method.getAnnotation(ContentType.class);
-            if (contentType != null)
-                handlerResult.putHeader(CONTENT_TYPE, contentType.value());
+        record MethodResult(Method method, String[] parameterNames, boolean hasBodyParam) {
         }
     }
 
-
     /**
-     * Interface for classes that hold and manage {@link AnnotatedConverters}.
-     * Implementing classes can provide access to their converter collection,
-     * allowing for centralized converter management and reuse.
-     */
-    public interface AnnotatedConvertersHolder {
-        /**
-         * Gets the AnnotatedConverters instance associated with this holder.
-         *
-         * @return the AnnotatedConverters instance
-         */
-        AnnotatedConverters getAnnotatedConverters();
-    }
-
-    /**
-     * Manages annotated converter methods for content type conversions.
-     * Provides caching and execution of converter methods marked with {@link ConvertsTo}
-     * and {@link ConvertsFrom} annotations. Thread-safe implementation using synchronized collections.
+     * Manages annotated converter methods for content type conversions. Provides caching and execution of converter
+     * methods marked with {@link ConvertsTo} and {@link ConvertsFrom} annotations. Thread-safe implementation using
+     * synchronized collections.
      * <p>
      * This class maintains a thread-safe cache of converter methods and provides functionality to:
      * <ul>
@@ -779,10 +781,45 @@ public class EasyRouting {
 
         private final Map<String, Method> convertersCache = Collections.synchronizedMap(new HashMap<>());
 
+        private static boolean checkMethodSignature(Method method) {
+            boolean result = Modifier.isStatic(method.getModifiers()) &&
+                    Modifier.isPublic(method.getModifiers()) &&
+                    method.getReturnType() != Void.class &&
+                    method.getParameterCount() == 1;
+            if (!result) {
+                logger.warn("Method: " + method + " does not meet the requirements for a converter method. " +
+                        "It must be static, public, have a single parameter, and return a non-void type.");
+            }
+            return result;
+        }
+
+        private static String keyToString(String key, boolean shortenClassNames) {
+            if (!shortenClassNames) return key;
+
+            String keyDelimiter = KEY_DELIMITER_TO;
+
+            String[] parts = key.split(keyDelimiter, 2);
+            if (parts.length != 2) {
+                keyDelimiter = KEY_DELIMITER_FROM;
+                parts = key.split(keyDelimiter, 2);
+            }
+
+            return MessageFormat.format("{0}{1}{2}", parts[0], keyDelimiter, parts[1].replaceAll("^.*[.$]", ""));
+        }
+
+        private static String methodToString(Method method, boolean shortenClassNames) {
+            return MessageFormat.format("{0} {1}.{2}({3})",
+                    shortenClassNames ? method.getReturnType().getSimpleName() : method.getReturnType().getName(),
+                    shortenClassNames ? method.getDeclaringClass().getSimpleName() : method.getDeclaringClass().getName(),
+                    method.getName(),
+                    Arrays.stream(method.getParameterTypes()).
+                            map(c -> shortenClassNames ? c.getSimpleName() : c.getName()).
+                            collect(Collectors.joining(",")));
+        }
+
         /**
-         * Collects and caches converter methods from the target object.
-         * Scans for methods annotated with {@link ConvertsTo} and {@link ConvertsFrom},
-         * storing them in the internal cache for later use.
+         * Collects and caches converter methods from the target object. Scans for methods annotated with
+         * {@link ConvertsTo} and {@link ConvertsFrom}, storing them in the internal cache for later use.
          *
          * @param target the object to scan for converter methods
          */
@@ -807,18 +844,6 @@ public class EasyRouting {
             convertersCache.putAll(result);
         }
 
-        private static boolean checkMethodSignature(Method method) {
-            boolean result = Modifier.isStatic(method.getModifiers()) &&
-                    Modifier.isPublic(method.getModifiers()) &&
-                    method.getReturnType() != Void.class &&
-                    method.getParameterCount() == 1;
-            if (!result) {
-                logger.warn("Method: " + method + " does not meet the requirements for a converter method. " +
-                        "It must be static, public, have a single parameter, and return a non-void type.");
-            }
-            return result;
-        }
-
         private String keyFor(ConvertsTo converter, Class<?> type) {
             return MessageFormat.format("\"{0}\"{1}{2}", converter.value(), KEY_DELIMITER_TO, type.getName());
         }
@@ -828,9 +853,9 @@ public class EasyRouting {
         }
 
         /**
-         * Returns a string representation of all registered converters.
-         * Each line contains a converter entry in the format "sourceType->targetType=methodSignature".
-         * Method signatures include return type, method name, and parameter types.
+         * Returns a string representation of all registered converters. Each line contains a converter entry in the
+         * format "sourceType->targetType=methodSignature". Method signatures include return type, method name, and
+         * parameter types.
          *
          * @return a string containing all registered converters, sorted by converter key, one per line
          */
@@ -840,9 +865,9 @@ public class EasyRouting {
         }
 
         /**
-         * Returns a string representation of all registered converters.
-         * Each line contains a converter entry in the format "sourceType->targetType=methodSignature".
-         * Method signatures include return type, method name, and parameter types.
+         * Returns a string representation of all registered converters. Each line contains a converter entry in the
+         * format "sourceType->targetType=methodSignature". Method signatures include return type, method name, and
+         * parameter types.
          *
          * @param shortenClassNames if true, uses simple class names instead of fully qualified names
          * @return a string containing all registered converters, sorted by converter key, one per line
@@ -857,30 +882,6 @@ public class EasyRouting {
                                     methodToString(e.getValue(), shortenClassNames))
                             .collect(java.util.stream.Collectors.joining("\n")) +
                     "\n}";
-        }
-
-        private static String keyToString(String key, boolean shortenClassNames) {
-            if (!shortenClassNames) return key;
-
-            String keyDelimiter = KEY_DELIMITER_TO;
-
-            String[] parts = key.split(keyDelimiter, 2);
-            if (parts.length != 2) {
-                keyDelimiter =  KEY_DELIMITER_FROM;
-                parts = key.split(keyDelimiter, 2);
-            }
-
-            return MessageFormat.format("{0}{1}{2}", parts[0], keyDelimiter, parts[1].replaceAll("^.*[.$]", ""));
-        }
-
-        private static String methodToString(Method method, boolean shortenClassNames) {
-            return MessageFormat.format("{0} {1}.{2}({3})",
-                    shortenClassNames ? method.getReturnType().getSimpleName() : method.getReturnType().getName(),
-                    shortenClassNames ? method.getDeclaringClass().getSimpleName() : method.getDeclaringClass().getName(),
-                    method.getName(),
-                    Arrays.stream(method.getParameterTypes()).
-                            map(c -> shortenClassNames ? c.getSimpleName() : c.getName()).
-                            collect(Collectors.joining(",")));
         }
 
         /**

@@ -52,6 +52,26 @@ This library is ideal for rapid prototyping, testing, or learning the basics
 of web application development. It offers a minimal, annotation-driven API that
 simplifies the development process while still providing powerful features.
 
+## Adding to Your Build
+
+To add EasyRouting to your build system, you can use the following Maven dependency:
+```xml
+<dependency>
+    <groupId>io.github.gregory-ledenev</groupId>
+    <artifactId>vert.x-easyrouting</artifactId>
+    <version>0.9.9</version>
+</dependency>
+```
+To add JavaDoc:
+```xml
+<dependency>
+    <groupId>io.github.gregory-ledenev</groupId>
+    <artifactId>vert.x-easyrouting</artifactId>
+    <version>0.9.9</version>
+    <classifier>javadoc</classifier>
+</dependency>
+```
+
 ## Key Features
 
 - No Vert.x knowledge required to build web applications
@@ -269,6 +289,28 @@ public static void main(String[] args) {
             start();
 }
 ```
+### Templates Support
+
+EasyRouting `Application` includes support of Templates so some files in local file system can be rendered according to
+a Template Model. To start, you should register a template engine with an `Application` using the `templateEngine()`
+method. Note: only Thymeleaf included in dependence. If you need to use other types - add appropriate dependencies to
+your app.
+
+```java
+new TestApplication().
+        templateEngine(TemplateEngineFactory.Type.Thymeleaf).
+        start();
+```
+
+Sample use of template processing:
+```java
+@GET("/*")
+@Template @FileFromFolder("documents")
+String get(@PathParam("path") String path, TemplateModel templateModel) {
+    templateModel.put("title", "SOME CUSTOM TITLE");
+    return path;
+}
+```
 
 ## Using With Vert.x Router
 
@@ -423,6 +465,21 @@ public String get(@PathParam("path") String path) {
     return path;
 }
 ```
+#### @Template
+
+Use `@Template` to specify that result of a method should be processed by a template engine; works only together with 
+`@FileFromFolder`. Note: Template Engine will process only path results that represent HTML files; files with other types 
+or textual results will be ignored. To make templates work, a Template Engine should be registered with an `Application` 
+or passed to `EasyRouter.setupController(...)` method.
+
+```java
+@GET("/*")
+@Template @FileFromFolder("documents")
+public String get(@PathParam("path") String path, TemplateModel templateModel) {
+    templateModel.put("title", "SOME CUSTOM TITLE");
+    return path;
+}
+```
 
 #### @NotNullResult
 
@@ -476,6 +533,10 @@ be done in several ways:
 - using `@BodyParam` annotation to bind HTTP body content to a method argument
 - using `@UploadsParam` annotation to bind a list of uploaded files to method
   arguments
+
+Some parameters don't require annotations as their type is enough to provide correct binding:
+- `RoutingContext`
+- `TemplateModel`
 
 #### @Param
 
@@ -651,26 +712,6 @@ folder that demonstrate various features of the EasyRouting library:
   authorization, and SSL support
 - **TestApplication**: demonstrates using EasyRouting Application class for
   prototyping and testing
-
-## Adding to Your Build
-
-To add EasyRouting to your build system, you can use the following Maven dependency:
-```xml
-<dependency>
-    <groupId>io.github.gregory-ledenev</groupId>
-    <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.8</version>
-</dependency>
-```
-To add JavaDoc:
-```xml
-<dependency>
-    <groupId>io.github.gregory-ledenev</groupId>
-    <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.8</version>
-    <classifier>javadoc</classifier>
-</dependency>
-```
 
 ## License
 
