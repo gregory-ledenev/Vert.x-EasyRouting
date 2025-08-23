@@ -59,14 +59,14 @@ import static com.gl.vertx.easyrouting.Result.CT_APPLICATION_JSON;
  * EasyRouting provides annotation-based HTTP request handling for Vert.x web applications. It simplifies route
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
- * @version 0.9.7
- * @since 0.9.7
+ * @version 0.9.8
+ * @since 0.9.8
  */
 public class EasyRouting {
     /**
      * Current version of the EasyRouting library.
      */
-    public static final String VERSION = "0.9.7";
+    public static final String VERSION = "0.9.8";
 
 
     private static final Logger logger = LoggerFactory.getLogger(EasyRouting.class);
