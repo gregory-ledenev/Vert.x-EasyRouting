@@ -31,6 +31,7 @@ import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.http.Cookie;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -531,6 +532,12 @@ public class EasyRouting {
                     ContextParam param = parameter.getAnnotation(ContextParam.class);
                     otherParamCount++;
                     paramNames.add(param.value());
+                } else if (parameter.getAnnotation(CookieParam.class) != null) {
+                    otherParamCount++;
+                    paramNames.add(parameter.getName());
+                } else if (parameter.getAnnotation(HeaderParam.class) != null) {
+                    otherParamCount++;
+                    paramNames.add(parameter.getName());
                 } else {
                     if (parameter.getName().matches("arg\\d+") && ! warnedAboutMissingParameterNames) {
                         warnedAboutMissingParameterNames = true;
@@ -582,6 +589,11 @@ public class EasyRouting {
                     result.add(ctx.fileUploads());
                 } else if (parameter.getAnnotation(PathParam.class) != null) {
                     result.add(ctx.normalizedPath());
+                } else if (parameter.getAnnotation(CookieParam.class) != null) {
+                    Cookie cookie = ctx.request().getCookie(parameter.getAnnotation(CookieParam.class).value());
+                    result.add(cookie != null ? cookie.getValue() : null);
+                } else if (parameter.getAnnotation(HeaderParam.class) != null) {
+                    result.add(ctx.request().getHeader(parameter.getAnnotation(HeaderParam.class).value()));
                 } else if (parameter.getType().equals(RoutingContext.class) && parameter.getAnnotation(ContextParam.class) != null) {
                     result.add(ctx);
                 } else {

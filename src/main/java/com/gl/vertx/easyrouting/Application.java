@@ -35,6 +35,7 @@ import io.vertx.ext.web.handler.BodyHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -404,11 +405,28 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
      *
      * @param userId    the ID of the user
      * @param roles     the list of roles assigned to the user
-     * @param jwtSecret the secret key used for signing JWT tokens. It can be a plain password or a string in PEM format
+     * @param expiresIn token expiration period; {@code null} for no expiration
+     * @param jwtSecret the secret key used for signing JWT tokens. It can be a plain password or a string in PEM
+     *                  format
      * @return a signed JWT token as a string
      */
-    public String generateJWTToken(String userId, List<String> roles, String jwtSecret) {
-        return JWTUtil.generateToken(vertx, userId, roles, jwtSecret);
+    public String generateJWTToken(String userId, List<String> roles, Duration expiresIn, String jwtSecret) {
+        return JWTUtil.generateToken(vertx, userId, roles, null, jwtSecret);
+    }
+
+    /**
+     * Generates a JWT token for a user with the specified user ID, roles and expiration period. JWT secret should be
+     * specified for application. Otherwise, call {@code generateJWTToken()}, explicitly providing secret.
+     *
+     * @param userId    the ID of the user
+     * @param roles     the list of roles assigned to the user
+     * @param expiresIn token expiration period; {@code null} for no expiration
+     * @return a signed JWT token as a string
+     */
+    public String generateJWTToken(String userId, List<String> roles, Duration expiresIn) {
+        Objects.requireNonNull(jwtSecret, "No JWT Secret defined for applications. " +
+                "Call generateJWTToken() explicitly specifying secret.");
+        return JWTUtil.generateToken(vertx, userId, roles, expiresIn, jwtSecret);
     }
 
     /**

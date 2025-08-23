@@ -40,7 +40,7 @@ import static com.gl.vertx.easyrouting.TestApplication.TestApplicationImpl.JWT_P
 import static com.gl.vertx.easyrouting.UserAdminApplication.JWT_SECRET;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@Rpc
+@Rpc(path = "/*")
 public class HelloWorld extends Application {
     @Blocking
     public String hello() {
@@ -51,7 +51,9 @@ public class HelloWorld extends Application {
     }
 
     public static void main(String[] args) {
-        new HelloWorld().start();
+        new HelloWorld()
+                .jwtAuth(JWT_SECRET, "/*")
+                .start();
     }
 }
 

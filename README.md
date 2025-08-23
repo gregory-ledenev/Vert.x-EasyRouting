@@ -521,6 +521,14 @@ public HandlerResult<String> uploadFiles(@Param("fileCount") int fileCount, @Upl
 }
 ```
 
+#### @HeaderParam
+
+Use the `@HeaderParam` annotation to bind a method parameter to an HTTP request header.
+
+#### @CookieParam
+
+Use the `@CookieParam` annotation to bind a method parameter to a specific cookie value.
+
 ### Returning Results
 
 EasyRouting simplifies handling method results by:
@@ -533,7 +541,7 @@ class lets you specify custom headers, status codes, and more. It also provides 
 scenarios. For example, to save uploaded files to the file system and then return a redirect response, your upload
 handling method can return: `Result.saveFiles("files", fileUploads, "redirect:/")`.
 
-If you need custom processing, possibly involving direct access to context - you can create a {@code Result} with a
+If you need custom processing, possibly involving direct access to context - you can create a {@code Result} 3 a
 handler and return it.
 
 ```java

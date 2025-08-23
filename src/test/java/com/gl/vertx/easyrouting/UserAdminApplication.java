@@ -156,9 +156,9 @@ class UserService {
 class LoginService {
     public String login(String user, String password) {
         if (user.equals("admin") && password.equals("admin_pwd"))
-            return JWTUtil.generateToken(null, user, List.of("user", "admin"), UserAdminApplication.JWT_SECRET);
+            return JWTUtil.generateToken(null, user, List.of("user", "admin"), null, UserAdminApplication.JWT_SECRET);
         if (user.equals("user") && password.equals("user_pwd"))
-            return JWTUtil.generateToken(null, user, List.of("user"), UserAdminApplication.JWT_SECRET);
+            return JWTUtil.generateToken(null, user, List.of("user"), null, UserAdminApplication.JWT_SECRET);
         else
             return null;
     }

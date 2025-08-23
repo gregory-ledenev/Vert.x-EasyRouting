@@ -151,17 +151,17 @@ public class TestApplication {
             return user.toString();
         }
 
+        @ConvertsFrom("text/user-string")
+        public static User convertUserFromString(String content) {
+            return of(content);
+        }
+
         @ConvertsTo("text/user-string")
         public static String convertUsersToString(User[] users) {
             return Arrays.stream(users)
                     .map(User::toString)
                     .reduce((s1, s2) -> s1 + "+" + s2)
                     .orElse("");
-        }
-
-        @ConvertsFrom("text/user-string")
-        public static User convertUserFromString(String content) {
-            return of(content);
         }
 
         @ConvertsFrom("text/user-string")
@@ -221,13 +221,13 @@ public class TestApplication {
         @Form
         @POST(value = "/login")
         public String login(@Param("user") String user, @Param("password") String password, @Param(value = "role", defaultValue = "") String role) {
-            return JWTUtil.generateToken(getVertx(), user, Arrays.asList(role.split(",")), JWT_PASSWORD);
+            return JWTUtil.generateToken(getVertx(), user, Arrays.asList(role.split(",")), null, JWT_PASSWORD);
         }
 
         @Form
         @POST(value = "/loginNotAnnotated")
         public String loginNotAnnotated(String user, String password, String role) {
-            return JWTUtil.generateToken(getVertx(), user, Arrays.asList(role.split(",")), JWT_PASSWORD);
+            return JWTUtil.generateToken(getVertx(), user, Arrays.asList(role.split(",")), null, JWT_PASSWORD);
         }
 
         @HandlesStatusCode(401)
@@ -256,6 +256,15 @@ public class TestApplication {
         @GET(value = "/concatenate")
         public String concatenate(@Param("str1") String str1, @Param("str2") String str2, @Param(value = "str3", defaultValue = "") String str3) {
             return str1 + str2 + (str3 != null && str3.isEmpty() ? "" : str3);
+        }
+
+        @GET(value = "/concatenateWithHeader")
+        public String concatenateWithHeader(@Param("str1") String str1,
+                                  @Param("str2") String str2,
+                                  @Param(value = "str3", defaultValue = "") String str3,
+                                  @HeaderParam("content-type") String header,
+                                            @CookieParam("SmallCookie") String cookie) {
+            return str1 + str2 + (str3 != null && str3.isEmpty() ? "" : str3) + header + cookie;
         }
 
         @HttpHeader("content-type: text/plain")
@@ -1236,6 +1245,46 @@ public class TestApplication {
                         response = client.send(request, HttpResponse.BodyHandlers.ofString());
                         assertEquals(200, response.statusCode());
                         assertEquals("Hello World", response.body());
+                    } catch (Throwable e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testHeaderParam() throws Throwable {
+        Application app = new TestApplicationImpl().
+                onStartCompletion(application -> {
+
+                    HttpClient client = HttpClient.newHttpClient();
+
+
+                    try {
+                        HttpRequest request = HttpRequest.newBuilder()
+                                .header("content-type", "text/plain")
+                                .header("Cookie", "SmallCookie=Oreo")
+                                .uri(URI.create("http://localhost:8080/concatenateWithHeader?str1=Hello%20&str2=World&str3=!"))
+                                .GET()
+                                .build();
+
+                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("Hello World!text/plainOreo", response.body());
+
+                        request = HttpRequest.newBuilder()
+                                .header("content-type", "text/plain")
+                                .uri(URI.create("http://localhost:8080/concatenateWithHeader?str1=Hello%20&str2=World"))
+                                .GET()
+                                .build();
+
+                        response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                        assertEquals(200, response.statusCode());
+                        assertEquals("Hello Worldtext/plainnull", response.body());
                     } catch (Throwable e) {
                         throw new RuntimeException(e);
                     } finally {
