@@ -293,8 +293,8 @@ public static void main(String[] args) {
 
 EasyRouting `Application` includes support of Templates so some files in local file system can be rendered according to
 a Template Model. To start, you should register a template engine with an `Application` using the `templateEngine()`
-method. Note: only Thymeleaf included in dependence. If you need to use other types - add appropriate dependencies to
-your app.
+method. Note: only Thymeleaf Template Engine included in dependencies. If you need to use other types - add appropriate 
+dependencies to your app.
 
 ```java
 new TestApplication().
@@ -308,6 +308,17 @@ by the Template Engine to render templates. Sample use of template processing:
 ```java
 @GET("/*")
 @Template @FileFromFolder("documents")
+String get(@PathParam("path") String path, TemplateModel templateModel) {
+    templateModel.put("title", "SOME CUSTOM TITLE");
+    return path;
+}
+```
+By default, only HTML files will be processed, but you may specify other content types to process for `@Template` 
+annotation:
+
+```java
+@GET("/*")
+@Template({"text/css"}) @FileFromFolder("documents")
 String get(@PathParam("path") String path, TemplateModel templateModel) {
     templateModel.put("title", "SOME CUSTOM TITLE");
     return path;
