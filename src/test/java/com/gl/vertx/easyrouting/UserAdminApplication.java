@@ -5,7 +5,6 @@ import com.gl.vertx.easyrouting.annotations.*;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 
@@ -38,7 +37,7 @@ public class UserAdminApplication extends Application {
             return application.userService.getUsers();
         }
 
-        @GET("/api/users/:id") @NotNullResult(value = "No user found", statusCode = 404)
+        @GET("/api/users/:id") @NullResult(value = "No user found", statusCode = 404)
         User getUser(@Param("id") String id) {
             return application.userService.getUser(id);
         }
@@ -82,13 +81,13 @@ public class UserAdminApplication extends Application {
         this.loginService = loginService;
     }
 
-    @POST("/login") @NotNullResult(value = "Invalid credentials", statusCode = 401)
+    @POST("/login") @NullResult(value = "Invalid credentials", statusCode = 401)
     String login(@BodyParam("path") LoginData loginData) {
         return loginService.login(loginData.username(), loginData.password());
     }
 
     @GET("/*")
-    @Template @FileFromFolder("documents")
+    @Template(processMimeTypes={"text/javascript"}) @FileFromFolder("documents")
     String get(@PathParam("path") String path, TemplateModel templateModel) {
         templateModel.put("title", "SOME CUSTOM TITLE");
         return path;

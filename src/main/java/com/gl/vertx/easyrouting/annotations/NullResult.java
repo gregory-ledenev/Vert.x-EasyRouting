@@ -39,7 +39,7 @@ import java.lang.annotation.Target;
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
-public @interface NotNullResult {
+public @interface NullResult {
     /**
      * The message to return when the method result is null.
      *

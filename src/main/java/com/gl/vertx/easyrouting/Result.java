@@ -26,7 +26,7 @@ package com.gl.vertx.easyrouting;
 
 import com.gl.vertx.easyrouting.annotations.FileFromFolder;
 import com.gl.vertx.easyrouting.annotations.FileFromResource;
-import com.gl.vertx.easyrouting.annotations.NotNullResult;
+import com.gl.vertx.easyrouting.annotations.NullResult;
 import com.gl.vertx.easyrouting.annotations.Template;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.MimeMapping;
@@ -567,8 +567,8 @@ public class Result<T> {
     private void handleNullResult(RoutingContext ctx) {
         if (annotations != null) {
             for (Annotation annotation : annotations) {
-                if (annotation instanceof NotNullResult notNullResult) {
-                    ctx.response().setStatusCode(notNullResult.statusCode()).end(notNullResult.value());
+                if (annotation instanceof NullResult nullResult) {
+                    ctx.response().setStatusCode(nullResult.statusCode()).end(nullResult.value());
                     return;
                 }
             }
@@ -616,10 +616,10 @@ public class Result<T> {
         } else {
 
             if (annotations != null) {
-                boolean processTemplate = false;
+                Template templateAnnotation = null;
                 for (Annotation annotation : annotations) {
                     if (annotation instanceof Template) {
-                        processTemplate = true;
+                        templateAnnotation = (Template) annotation;
                         break;
                     }
                 }
@@ -629,8 +629,10 @@ public class Result<T> {
                         return;
                     } else if (annotation instanceof FileFromFolder fileFromFolder) {
                         String mimeType = getMimeType(string);
-                        if (CT_TEXT_HTML.equals(mimeType) && processTemplate && templateEngine == null) {
-                            logger.error("Skipped processing template: " + string + " No template engine registered with the app.");
+                        boolean processTemplate = templateAnnotation != null &&
+                                (CT_TEXT_HTML.equals(mimeType) || Arrays.asList(templateAnnotation.processMimeTypes()).contains(mimeType));
+                        if (processTemplate && templateEngine == null) {
+                            logger.error("Skipped processing templateAnnotation: " + string + " No templateAnnotation engine registered with the app.");
                             processTemplate = false;
                         }
                         Result.fileFromFolder(Path.of(fileFromFolder.value()), string, processTemplate ? templateEngine : null).handle(ctx);

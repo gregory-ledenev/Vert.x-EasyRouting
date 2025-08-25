@@ -59,7 +59,7 @@ To add EasyRouting to your build system, you can use the following Maven depende
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.9</version>
+    <version>0.9.10</version>
 </dependency>
 ```
 To add JavaDoc:
@@ -67,7 +67,7 @@ To add JavaDoc:
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.9</version>
+    <version>0.9.10</version>
     <classifier>javadoc</classifier>
 </dependency>
 ```
@@ -467,7 +467,7 @@ public String get(@PathParam("path") String path) {
 ```
 #### @Template
 
-Use `@Template` to specify that result of a method should be processed by a template engine; works only together with 
+Use `@Template` to specify that file returned by a method should be processed by a template engine; works only together with 
 `@FileFromFolder`. Note: Template Engine will process only path results that represent HTML files; files with other types 
 or textual results will be ignored. To make templates work, a Template Engine should be registered with an `Application` 
 or passed to `EasyRouter.setupController(...)` method.
@@ -481,14 +481,14 @@ public String get(@PathParam("path") String path, TemplateModel templateModel) {
 }
 ```
 
-#### @NotNullResult
+#### @NullResult
 
-Use `@NotNullResult` annotation to return some response with text and code if
+Use `@NullResult` annotation to return some response with text and code if
 the annotated method returns null:
 
 ```java
 @GET("/api/users/:id")
-@NotNullResult(value = "No user found", statusCode = 404)
+@NullResult(value = "No user found", statusCode = 404)
 public User getUser(@Param("id") String id) {
     return userService.getUser(id);
 }

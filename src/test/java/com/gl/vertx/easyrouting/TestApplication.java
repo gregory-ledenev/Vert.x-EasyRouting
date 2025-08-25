@@ -5,44 +5,570 @@ import io.vertx.core.json.JsonObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
 
-import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
-import static com.gl.vertx.easyrouting.TestApplication.User.*;
+import static com.gl.vertx.easyrouting.TestApplication.User.of;
+import static com.gl.vertx.easyrouting.TestUtils.testGET;
+import static com.gl.vertx.easyrouting.TestUtils.testPOST;
+import static com.gl.vertx.easyrouting.annotations.HttpMethods.GET;
+import static com.gl.vertx.easyrouting.annotations.HttpMethods.POST;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class TestApplication {
 
-    static class TestController {
-        @GET("/testcontroller/*")
-        public String hello(){
-            return "Hello from TestController!";
-        }
-    }
+    static final String JWT_TOKEN_USER_ADMIN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0VXNlciIsInJvbGVzIjpbInVzZXIiLCJhZG1pbiJdLCJpYXQiOjE3NTQyNTUwMDN9.VgvXLusig-wC447NHetSonDfP60qlYI7yjFGvqvOqfo";
+    static final String JWT_TOKEN_USER = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0VXNlciIsInJvbGVzIjpbInVzZXIiXSwiaWF0IjoxNzU0MjU1MDUwfQ.zcTUXFJxHnWSVdnU306tl4gKJZUlhujW5kPS1njjd4M";
 
     @BeforeEach
     void setUp() {
         com.gl.vertx.easyrouting.User.clearUserIDCounter();
     }
 
+    @Test
+    void testApplication() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "", httpResponse -> {
+            assertEquals(200, httpResponse.statusCode());
+            assertEquals("Hello from TestApplication!", httpResponse.body());
+        });
+    }
+
+    @Test
+    void testController() throws Throwable {
+        testGET(() -> new TestApplicationImpl().controller(new TestController()), 8080, "testcontroller/",
+                null,
+                httpResponse -> {
+                    assertEquals(200, httpResponse.statusCode());
+                    assertEquals("Hello from TestController!", httpResponse.body());
+                });
+    }
+
+    @Test
+    void testAnnotatedConvertersDiscovery() throws Throwable {
+        Application app = new TestApplicationImpl().
+                module(new TestConverters()).
+                onStartCompletion(application -> {
+                    try {
+                        assertEquals("""
+                                     {
+                                       "text/user-string"->[Lcom.gl.vertx.easyrouting.TestApplication$User; = java.lang.String com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUsersToString([Lcom.gl.vertx.easyrouting.TestApplication$User;)
+                                       "text/user-string"->com.gl.vertx.easyrouting.TestApplication$User = java.lang.String com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserToString(com.gl.vertx.easyrouting.TestApplication$User)
+                                       "text/user-string"<-[Lcom.gl.vertx.easyrouting.TestApplication$User; = [Lcom.gl.vertx.easyrouting.TestApplication$User; com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUsersFromString(java.lang.String)
+                                       "text/user-string"<-com.gl.vertx.easyrouting.TestApplication$User = com.gl.vertx.easyrouting.TestApplication$User com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserFromString(java.lang.String)
+                                       "text/xml"->com.gl.vertx.easyrouting.TestApplication$User = java.lang.String com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserToXml(com.gl.vertx.easyrouting.TestApplication$User)
+                                       "text/xml"<-com.gl.vertx.easyrouting.TestApplication$User = com.gl.vertx.easyrouting.TestApplication$User com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserFromXml(java.lang.String)
+                                     }""", application.getAnnotatedConverters().toString());
+                    } finally {
+                        application.stop();
+                    }
+                }).
+                start(8080);
+
+        app.handleCompletionHandlerFailure();
+    }
+
+    @Test
+    void testCustomHandler() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "testCustomHandler",
+                null,
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("Hello World!", response.body());
+                });
+    }
+
+    @Test
+    void testComposeUser() throws Throwable {
+        testPOST(TestApplicationImpl::new, 8080, "composeUser",
+                builder -> builder.header("Content-Type", "application/json"),
+                "{\"name\":\"John\", \"email\":\"john@aaa.com\"}",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"name":"John","email":"john@aaa.com"}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonMultiply() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/test",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "multiply", "params": {"a":2, "b":3}, "id": 2}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","result":6}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonMultiplyList() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/test",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "multiply", "params": {"list":[1, 2, 3, 4]}, "id": 2}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","result":24}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonMultiplyArray() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/test",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "multiply", "params": {"list":[1, 2, 3, 4, 5]}, "id": 2}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","result":120}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonIntArray() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/test",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "intArray", "params": {"a":2, "b":3}, "id": 2}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","result":[2,3]}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonIntList() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/test",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "intList", "params": {"a":2, "b":3}, "id": 2}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","result":[2,3]}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonIntMap() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/test",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "intMap", "params": {"a":2, "b":3}, "id": 2}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    JsonObject jsonObject = new JsonObject(response.body());
+                    assertEquals("2", jsonObject.getJsonObject("result").getString("a"));
+                    assertEquals("3", jsonObject.getJsonObject("result").getString("b"));
+                });
+    }
+
+    @Test
+    void testJsonVoidMethod() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/test",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "voidMethod", "params": {"a":2, "b":3}, "id": 2}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","result":null}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonNotification() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/test",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "voidMethod", "params": {"a":2, "b":3}}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("", response.body());
+                    System.out.println(response.body());
+                });
+    }
+
+    @Test
+    void testJsonScheme() throws Throwable {
+        testGET(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/test",
+                builder -> builder.header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                response -> {
+                    assertEquals(200, response.statusCode());
+//                        assertEquals("", response.body());
+                    System.out.println(response.body());
+                });
+    }
+
+    @Test
+    void testJsonMultiplyAsString() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/test",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "multiplyAsString", "params": {"a":2, "b":3}, "id": 2}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","result":"6"}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonBlockingHello() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/test",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "blockingHello", "params": {}, "id": 2}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","result":"Blocking hello from RPC TestApplication!"}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonRootAdd() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/root/",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "add", "params": {"a":2, "b":3}, "id": 2}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","result":5}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonRpcGetUsers() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcUserApplicationModule()), 8080, "api/users/jsonrpc",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "getUsers", "params": {}, "id": 2}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","result":[{"id":"1","name":"John Doe","email":"john.doe@example.com"},{"id":"2","name":"Sarah Wilson","email":"sarah.wilson@example.com"},{"id":"3","name":"Michael Smith","email":"mike.smith@example.com"},{"id":"4","name":"Emily Johnson","email":"emily.j@example.com"},{"id":"5","name":"David Brown","email":"d.brown@example.com"}]}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonRpcGetUserByID() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcUserApplicationModule()), 8080, "api/users/jsonrpc",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "getUser", "params": {"id":"3"}, "id": 2}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","result":{"id":"3","name":"Michael Smith","email":"mike.smith@example.com"}}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonRpcUpdateUser() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcUserApplicationModule()), 8080, "api/users/jsonrpc",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {
+                   "jsonrpc":"2.0",
+                   "method":"updateUser",
+                   "params":{
+                      "id":"3",
+                      "user":{
+                         "id":"3",
+                         "name":"Michael Smith JJJJJJJ",
+                         "email":"mike.smith@example.com"
+                      }
+                   },
+                   "id":2
+                }""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","result":{"id":"3","name":"Michael Smith JJJJJJJ","email":"mike.smith@example.com"}}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonRpcUpdateUsers() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcUserApplicationModule()), 8080, "api/users/jsonrpc",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {
+                   "jsonrpc":"2.0",
+                   "method":"updateUsers",
+                   "params":{
+                      "ids":["3"],
+                      "users":[{
+                         "id":"3",
+                         "name":"Michael Smith JJJJJJJ",
+                         "email":"mike.smith@example.com"
+                      }]
+                   },
+                   "id":2
+                }""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","result":[{"id":"3","name":"Michael Smith JJJJJJJ","email":"mike.smith@example.com"}]}""", response.body());
+                });
+    }
+
+    @Test
+    void testJsonRpcUpdateUserList() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcUserApplicationModule()), 8080, "api/users/jsonrpc",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {
+                   "jsonrpc":"2.0",
+                   "method":"updateUserList",
+                   "params":{
+                      "ids":["3"],
+                      "users":[{
+                         "id":"3",
+                         "name":"Michael Smith JJJJJJJ",
+                         "email":"mike.smith@example.com"
+                      }]
+                   },
+                   "id":2
+                }""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                     {"jsonrpc":"2.0","id":"2","result":[{"id":"3","name":"Michael Smith JJJJJJJ","email":"mike.smith@example.com"}]}""", response.body());
+                });
+    }
+
+    @Test
+    void testConversionTo() throws Throwable {
+        testGET(() -> new TestApplicationImpl().module(new TestConverters()), 8080, "testConversionTo",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("text/user-string", response.headers().map().get("content-type").get(0));
+                    assertEquals("User[name=John Doe, email=john.doe@gmail.com]", response.body());
+                });
+    }
+
+    @Test
+    void testConversionFrom() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new TestConverters()), 8080, "testConversionFrom",
+                builder -> builder.header("Content-Type", "text/user-string"),
+                "User[name=John Doe, email=john.doe@gmail.com]",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("text/user-string", response.headers().map().get("content-type").get(0));
+                    assertEquals("User[name=John Doe, email=john.doe@gmail.com]", response.body());
+                });
+    }
+
+    @Test
+    void testMultipleConversionFrom() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new TestConverters()), 8080, "testMultipleConversionFrom",
+                builder -> builder.header("Content-Type", "text/user-string"),
+                "User[name=John Doe, email=john.doe@gmail.com]+User[name=Mike Hardy, email=mike.hardy@gmail.com]",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("text/user-string", response.headers().map().get("content-type").get(0));
+                    assertEquals("User[name=John Doe, email=john.doe@gmail.com]+User[name=Mike Hardy, email=mike.hardy@gmail.com]", response.body());
+                });
+    }
+
+    @Test
+    void testMultipleConversionFromList() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new TestConverters()), 8080, "testMultipleConversionFromList",
+                builder -> builder.header("Content-Type", "text/user-string"),
+                "User[name=John Doe, email=john.doe@gmail.com]+User[name=Mike Hardy, email=mike.hardy@gmail.com]",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("text/user-string", response.headers().map().get("content-type").get(0));
+                    assertEquals("User[name=John Doe, email=john.doe@gmail.com]+User[name=Mike Hardy, email=mike.hardy@gmail.com]", response.body());
+                });
+    }
+
+    @Test
+    void testMultipleHeaders() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "multipleHeaders",
+                null,
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals(List.of("text/plain"), response.headers().map().get("content-type"));
+                    assertEquals(List.of("Value1"), response.headers().map().get("header1"));
+                    assertEquals(List.of("Value2"), response.headers().map().get("header2"));
+                    assertEquals("Multiple Headers", response.body());
+                });
+    }
+
+    @Test
+    void testBlocking() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "blockingHello",
+                null,
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("Blocking hello from TestApplication!", response.body());
+                });
+    }
+
+    @Test
+    void testMissingOptionalParam() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "concatenate?str1=Hello%20&str2=World",
+                null,
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("Hello World", response.body());
+                });
+    }
+
+    @Test
+    void testOptionalParam() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "concatenate?str1=Hello%20&str2=World&str3=!",
+                null,
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("Hello World!", response.body());
+                });
+    }
+
+    @Test
+    void testHeaderParam() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "concatenateWithHeader?str1=Hello%20&str2=World&str3=!",
+                builder -> builder.header("content-type", "text/plain").header("Cookie", "SmallCookie=Oreo"),
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("Hello World!text/plainOreo", response.body());
+                });
+    }
+
+    @Test
+    void testFormSubmit() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new TestConverters()), 8080, "login?role=user",
+                builder -> builder.header("Content-Type", "application/x-www-form-urlencoded"),
+                "user=testUser&password=testPass",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                });
+    }
+
+    @Test
+    void testFormSubmitNotAnnotated() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new TestConverters()), 8080, "loginNotAnnotated?role=user",
+                builder -> builder.header("Content-Type", "application/x-www-form-urlencoded"),
+                "user=testUser&password=testPass",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                });
+    }
+
+    @Test
+    void testUnauthenticated() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "api",
+                null,
+                response -> {
+                    assertEquals(302, response.statusCode()); // redirect /loginForm
+                    System.out.println(response.body());
+                });
+    }
+
+    @Test
+    void testAuthorized() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "api",
+                builder -> builder.header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("Hello protected API!", response.body());
+                });
+    }
+
+    @Test
+    void testAuthorizedForUserAndAdmin() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "api/user/",
+                builder -> builder.header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("Hello protected API (user)!", response.body());
+                });
+    }
+
+    @Test
+    void testAuthorizedForAdmin() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "api/admin/",
+                builder -> builder.header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("Hello protected API (admin)!", response.body());
+                });
+    }
+
+    @Test
+    void testUnauthorizedForAdmin() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "api/admin/",
+                builder -> builder.header("Authorization", "Bearer " + JWT_TOKEN_USER),
+                response -> {
+                    assertEquals(403, response.statusCode());
+                });
+    }
+
+    static class TestController {
+        @GET("/testcontroller/*")
+        public String hello() {
+            return "Hello from TestController!";
+        }
+    }
+
     @Description("Test service for JSON-RPC methods")
-    @Rpc(path = "/api/jsonrpc/test" , provideScheme = true)
+    @Rpc(path = "/api/jsonrpc/test", provideScheme = true)
     static class JsonRpcTestApplicationModule extends ApplicationModule<TestApplicationImpl> {
+
+        public JsonRpcTestApplicationModule(String... protectedRoutes) {
+            super(protectedRoutes);
+        }
 
         @Description("""
                      Multiplies two integers with an optional third integer
                      
                      @param a the first integer
                      @param b the second integer""")
-        public int multiply(@Param("a") int a , @Param("b") int b, @Param(value = "c", defaultValue = "1") int c) {
+        public int multiply(@Param("a") int a, @Param("b") int b, @Param(value = "c", defaultValue = "1") int c) {
             return a * b * c;
         }
 
@@ -63,28 +589,28 @@ public class TestApplication {
         }
 
         @Description("Multiplies two integers and returns the result as a string")
-        public String multiplyAsString(@Param("a") int a , @Param("b") int b) {
+        public String multiplyAsString(@Param("a") int a, @Param("b") int b) {
             return String.valueOf(a * b);
         }
 
         @Description("Returns an array of two integers")
-        public int[] intArray(@Param("a") int a , @Param("b") int b) {
+        public int[] intArray(@Param("a") int a, @Param("b") int b) {
             return new int[]{a, b};
         }
 
         @Description("Returns a list of two integers")
-        public List<Integer> intList(@Param("a") int a , @Param("b") int b) {
+        public List<Integer> intList(@Param("a") int a, @Param("b") int b) {
             return List.of(a, b);
         }
 
         @Description("Returns a map with two integer values")
-        public Map<String, Integer> intMap(@Param("a") int a , @Param("b") int b) {
+        public Map<String, Integer> intMap(@Param("a") int a, @Param("b") int b) {
             return Map.of("a", a, "b", b);
         }
 
         @SuppressWarnings("EmptyMethod")
         @Description("A void method that does nothing")
-        public void voidMethod(@Param("a") int a , @Param("b") int b) {
+        public void voidMethod(@Param("a") int a, @Param("b") int b) {
         }
 
         @Blocking
@@ -96,14 +622,14 @@ public class TestApplication {
             }
             return "Blocking hello from RPC TestApplication!";
         }
-
-        public JsonRpcTestApplicationModule(String... protectedRoutes) {
-            super(protectedRoutes);
-        }
     }
 
     @Rpc(path = "/api/users/jsonrpc")
     static class JsonRpcUserApplicationModule extends ApplicationModule<TestApplicationImpl> {
+        public JsonRpcUserApplicationModule(String... protectedRoutes) {
+            super(protectedRoutes);
+        }
+
         public List<com.gl.vertx.easyrouting.User> getUsers() {
             return application.userService.getUsers();
         }
@@ -139,10 +665,6 @@ public class TestApplication {
         public boolean deleteUser(@Param("id") String id) {
             return application.userService.deleteUser(id);
         }
-
-        public JsonRpcUserApplicationModule(String... protectedRoutes) {
-            super(protectedRoutes);
-        }
     }
 
     static class TestConverters extends ApplicationModule<TestApplicationImpl> {
@@ -166,7 +688,7 @@ public class TestApplication {
 
         @ConvertsFrom("text/user-string")
         public static User[] convertUsersFromString(String content) {
-            String [] parts = content.split("\\+");
+            String[] parts = content.split("\\+");
             if (parts.length > 0) {
                 User[] users = new User[parts.length];
                 for (int i = 0; i < parts.length; i++) {
@@ -189,11 +711,28 @@ public class TestApplication {
     }
 
     @SuppressWarnings("SameReturnValue")
-    @Rpc(path = "/api/jsonrpc/root" , provideScheme = true)
+    @Rpc(path = "/api/jsonrpc/root", provideScheme = true)
     static class TestApplicationImpl extends Application {
         public static final String JWT_PASSWORD = "veeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeery long password";
+        final UserService userService = new UserService();
 
-        public int add(@Param("a") int a , @Param("b") int b, @Param(value = "c", defaultValue = "0") int c) {
+        public TestApplicationImpl() {
+            jwtAuth(JWT_PASSWORD, "/api/*");
+        }
+
+        public static void main(String[] args) {
+            TestApplicationImpl app = new TestApplicationImpl().
+                    module(new JsonRpcUserApplicationModule()).
+                    module(new TestConverters()).
+                    onStartCompletion(application -> {
+                        System.out.println(application.getAnnotatedConverters().toString(false));
+                        application.waitForInput();
+                    }).
+                    handleShutdown().
+                    start(8080);
+        }
+
+        public int add(@Param("a") int a, @Param("b") int b, @Param(value = "c", defaultValue = "0") int c) {
             return a + b + c;
         }
 
@@ -260,9 +799,9 @@ public class TestApplication {
 
         @GET(value = "/concatenateWithHeader")
         public String concatenateWithHeader(@Param("str1") String str1,
-                                  @Param("str2") String str2,
-                                  @Param(value = "str3", defaultValue = "") String str3,
-                                  @HeaderParam("content-type") String header,
+                                            @Param("str2") String str2,
+                                            @Param(value = "str3", defaultValue = "") String str3,
+                                            @HeaderParam("content-type") String header,
                                             @CookieParam("SmallCookie") String cookie) {
             return str1 + str2 + (str3 != null && str3.isEmpty() ? "" : str3) + header + cookie;
         }
@@ -311,26 +850,8 @@ public class TestApplication {
             return new User(name, email);
         }
 
-        final UserService userService = new UserService();
-
         public UserService userService() {
             return userService;
-        }
-
-        public TestApplicationImpl() {
-            jwtAuth(JWT_PASSWORD, "/api/*");
-        }
-
-        public static void main(String[] args) {
-            TestApplicationImpl app = new TestApplicationImpl().
-                    module(new JsonRpcUserApplicationModule()).
-                    module(new TestConverters()).
-                    onStartCompletion(application -> {
-                        System.out.println(application.getAnnotatedConverters().toString(false));
-                        application.waitForInput();
-                    }).
-                    handleShutdown().
-                    start(8080);
         }
     }
 
@@ -342,1159 +863,15 @@ public class TestApplication {
         }
     }
 
-    @Test
-    void testApplication() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/"))
-                            .GET()
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("Hello from TestApplication!", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testController() throws Throwable {
-        Application app = new TestApplicationImpl().
-                controller(new TestController()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/testcontroller/"))
-                            .GET()
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("Hello from TestController!", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testAnnotatedConvertersDiscovery() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new TestConverters()).
-                onStartCompletion(application -> {
-                    try {
-                        assertEquals("""
-                                     {
-                                       "text/user-string"->[Lcom.gl.vertx.easyrouting.TestApplication$User; = java.lang.String com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUsersToString([Lcom.gl.vertx.easyrouting.TestApplication$User;)
-                                       "text/user-string"->com.gl.vertx.easyrouting.TestApplication$User = java.lang.String com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserToString(com.gl.vertx.easyrouting.TestApplication$User)
-                                       "text/user-string"<-[Lcom.gl.vertx.easyrouting.TestApplication$User; = [Lcom.gl.vertx.easyrouting.TestApplication$User; com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUsersFromString(java.lang.String)
-                                       "text/user-string"<-com.gl.vertx.easyrouting.TestApplication$User = com.gl.vertx.easyrouting.TestApplication$User com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserFromString(java.lang.String)
-                                       "text/xml"->com.gl.vertx.easyrouting.TestApplication$User = java.lang.String com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserToXml(com.gl.vertx.easyrouting.TestApplication$User)
-                                       "text/xml"<-com.gl.vertx.easyrouting.TestApplication$User = com.gl.vertx.easyrouting.TestApplication$User com.gl.vertx.easyrouting.TestApplication$TestConverters.convertUserFromXml(java.lang.String)
-                                     }""", application.getAnnotatedConverters().toString());
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testCustomHandler() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/testCustomHandler"))
-                            .GET()
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("Hello World!", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testComposeUser() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/composeUser"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("{\"name\":\"John\", \"email\":\"john@aaa.com\"}"))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                {"name":"John","email":"john@aaa.com"}""", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonMultiply() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcTestApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "multiply", "params": {"a":2, "b":3}, "id": 2}"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":6}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonMultiplyList() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcTestApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "multiply", "params": {"list":[1, 2, 3, 4]}, "id": 2}"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":24}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonMultiplyArray() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcTestApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "multiply", "params": {"list":[1, 2, 3, 4, 5]}, "id": 2}"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":120}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonIntArray() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcTestApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "intArray", "params": {"a":2, "b":3}, "id": 2}"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":[2,3]}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonIntList() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcTestApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "intList", "params": {"a":2, "b":3}, "id": 2}"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":[2,3]}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonIntMap() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcTestApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "intMap", "params": {"a":2, "b":3}, "id": 2}"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        JsonObject jsonObject = new JsonObject(response.body());
-                        assertEquals("2", jsonObject.getJsonObject("result").getString("a"));
-                        assertEquals("3", jsonObject.getJsonObject("result").getString("b"));
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonVoidMethod() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcTestApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "voidMethod", "params": {"a":2, "b":3}, "id": 2}"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":null}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonNotification() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcTestApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "voidMethod", "params": {"a":2, "b":3}}"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonScheme() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcTestApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
-                            .GET()
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-//                        assertEquals("", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonMultiplyAsString() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcTestApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "multiplyAsString", "params": {"a":2, "b":3}, "id": 2}"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":"6"}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonBlockingHello() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcTestApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/jsonrpc/test"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "blockingHello", "params": {}, "id": 2}"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":"Blocking hello from RPC TestApplication!"}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonRootAdd() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcTestApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/jsonrpc/root"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "add", "params": {"a":2, "b":3}, "id": 2}"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":5}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonRpcGetUsers() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcUserApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/users/jsonrpc"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "getUsers", "params": {}, "id": 2}"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":[{"id":"1","name":"John Doe","email":"john.doe@example.com"},{"id":"2","name":"Sarah Wilson","email":"sarah.wilson@example.com"},{"id":"3","name":"Michael Smith","email":"mike.smith@example.com"},{"id":"4","name":"Emily Johnson","email":"emily.j@example.com"},{"id":"5","name":"David Brown","email":"d.brown@example.com"}]}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonRpcGetUserByID() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcUserApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/users/jsonrpc"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {"jsonrpc": "2.0", "method": "getUser", "params": {"id":"3"}, "id": 2}"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":{"id":"3","name":"Michael Smith","email":"mike.smith@example.com"}}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonRpcUpdateUser() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcUserApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/users/jsonrpc"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {
-                                                                         "jsonrpc":"2.0",
-                                                                         "method":"updateUser",
-                                                                         "params":{
-                                                                            "id":"3",
-                                                                            "user":{
-                                                                               "id":"3",
-                                                                               "name":"Michael Smith JJJJJJJ",
-                                                                               "email":"mike.smith@example.com"
-                                                                            }
-                                                                         },
-                                                                         "id":2
-                                                                      }"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":{"id":"3","name":"Michael Smith JJJJJJJ","email":"mike.smith@example.com"}}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonRpcUpdateUsers() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcUserApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/users/jsonrpc"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {
-                                                                         "jsonrpc":"2.0",
-                                                                         "method":"updateUsers",
-                                                                         "params":{
-                                                                            "ids":["3"],
-                                                                            "users":[{
-                                                                               "id":"3",
-                                                                               "name":"Michael Smith JJJJJJJ",
-                                                                               "email":"mike.smith@example.com"
-                                                                            }]
-                                                                         },
-                                                                         "id":2
-                                                                      }"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":[{"id":"3","name":"Michael Smith JJJJJJJ","email":"mike.smith@example.com"}]}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testJsonRpcUpdateUserList() throws Throwable {
-        Application app = new TestApplicationImpl().
-                module(new JsonRpcUserApplicationModule()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/users/jsonrpc"))
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("""
-                                                                      {
-                                                                         "jsonrpc":"2.0",
-                                                                         "method":"updateUserList",
-                                                                         "params":{
-                                                                            "ids":["3"],
-                                                                            "users":[{
-                                                                               "id":"3",
-                                                                               "name":"Michael Smith JJJJJJJ",
-                                                                               "email":"mike.smith@example.com"
-                                                                            }]
-                                                                         },
-                                                                         "id":2
-                                                                      }"""))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("""
-                                     {"jsonrpc":"2.0","id":"2","result":[{"id":"3","name":"Michael Smith JJJJJJJ","email":"mike.smith@example.com"}]}""", response.body());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-    @Test
-    void testConversionTo() throws Throwable {
-        TestApplicationImpl app = new TestApplicationImpl().
-                module(new TestConverters()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/testConversionTo"))
-                            .GET()
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("text/user-string", response.headers().map().get("content-type").get(0));
-                        assertEquals("User[name=John Doe, email=john.doe@gmail.com]", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testConversionFrom() throws Throwable {
-        TestApplicationImpl app = new TestApplicationImpl().
-                module(new TestConverters()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/testConversionFrom"))
-                            .header("Content-Type", "text/user-string")
-                            .POST(HttpRequest.BodyPublishers.ofString("User[name=John Doe, email=john.doe@gmail.com]"))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("text/user-string", response.headers().map().get("content-type").get(0));
-                        assertEquals("User[name=John Doe, email=john.doe@gmail.com]", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testMultipleConversionFrom() throws Throwable {
-        TestApplicationImpl app = new TestApplicationImpl().
-                module(new TestConverters()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/testMultipleConversionFrom"))
-                            .header("Content-Type", "text/user-string")
-                            .POST(HttpRequest.BodyPublishers.ofString("User[name=John Doe, email=john.doe@gmail.com]+User[name=Mike Hardy, email=mike.hardy@gmail.com]"))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("text/user-string", response.headers().map().get("content-type").get(0));
-                        assertEquals("User[name=John Doe, email=john.doe@gmail.com]+User[name=Mike Hardy, email=mike.hardy@gmail.com]", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testMultipleConversionFromList() throws Throwable {
-        TestApplicationImpl app = new TestApplicationImpl().
-                module(new TestConverters()).
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/testMultipleConversionFromList"))
-                            .header("Content-Type", "text/user-string")
-                            .POST(HttpRequest.BodyPublishers.ofString("User[name=John Doe, email=john.doe@gmail.com]+User[name=Mike Hardy, email=mike.hardy@gmail.com]"))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("text/user-string", response.headers().map().get("content-type").get(0));
-                        assertEquals("User[name=John Doe, email=john.doe@gmail.com]+User[name=Mike Hardy, email=mike.hardy@gmail.com]", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testMultipleHeaders() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/multipleHeaders"))
-                            .GET()
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals(List.of("text/plain"), response.headers().map().get("content-type"));
-                        assertEquals(List.of("Value1"), response.headers().map().get("header1"));
-                        assertEquals(List.of("Value2"), response.headers().map().get("header2"));
-                        assertEquals("Multiple Headers", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testBlocking() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/blockingHello"))
-                            .GET()
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("Blocking hello from TestApplication!", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testOptionalParam() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-
-
-                    try {
-                        HttpRequest request = HttpRequest.newBuilder()
-                                .uri(URI.create("http://localhost:8080/concatenate?str1=Hello%20&str2=World&str3=!"))
-                                .GET()
-                                .build();
-
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("Hello World!", response.body());
-
-                        request = HttpRequest.newBuilder()
-                                .uri(URI.create("http://localhost:8080/concatenate?str1=Hello%20&str2=World"))
-                                .GET()
-                                .build();
-
-                        response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("Hello World", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testHeaderParam() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-
-
-                    try {
-                        HttpRequest request = HttpRequest.newBuilder()
-                                .header("content-type", "text/plain")
-                                .header("Cookie", "SmallCookie=Oreo")
-                                .uri(URI.create("http://localhost:8080/concatenateWithHeader?str1=Hello%20&str2=World&str3=!"))
-                                .GET()
-                                .build();
-
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("Hello World!text/plainOreo", response.body());
-
-                        request = HttpRequest.newBuilder()
-                                .header("content-type", "text/plain")
-                                .uri(URI.create("http://localhost:8080/concatenateWithHeader?str1=Hello%20&str2=World"))
-                                .GET()
-                                .build();
-
-                        response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("Hello Worldtext/plainnull", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    static final String JWT_TOKEN_USER_ADMIN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0VXNlciIsInJvbGVzIjpbInVzZXIiLCJhZG1pbiJdLCJpYXQiOjE3NTQyNTUwMDN9.VgvXLusig-wC447NHetSonDfP60qlYI7yjFGvqvOqfo";
-    static final String JWT_TOKEN_USER = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0VXNlciIsInJvbGVzIjpbInVzZXIiXSwiaWF0IjoxNzU0MjU1MDUwfQ.zcTUXFJxHnWSVdnU306tl4gKJZUlhujW5kPS1njjd4M";
-
-    @Test
-    void testFormSubmit() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/login?role=user"))
-                            .header("Content-Type", "application/x-www-form-urlencoded")
-                            .POST(HttpRequest.BodyPublishers.ofString("user=testUser&password=testPass"))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testFormSubmitNotAnnotated() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/loginNotAnnotated?role=user"))
-                            .header("Content-Type", "application/x-www-form-urlencoded")
-                            .POST(HttpRequest.BodyPublishers.ofString("user=testUser&password=testPass"))
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testUnauthenticated() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create("http://localhost:8080/api/"))
-                            .GET()
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(302, response.statusCode()); // redirect /loginForm
-                        System.out.println(response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                })
-                .start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testAuthorized() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/"))
-                            .GET()
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("Hello protected API!", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                })
-                .start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testAuthorizedForUserAndAdmin() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/user/"))
-                            .GET()
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("Hello protected API (user)!", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                }).
-                start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testAuthorizedForAdmin() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN)
-                            .uri(URI.create("http://localhost:8080/api/admin/"))
-                            .GET()
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(200, response.statusCode());
-                        assertEquals("Hello protected API (admin)!", response.body());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                })
-                .start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
-    @Test
-    void testUnauthorizedForAdmin() throws Throwable {
-        Application app = new TestApplicationImpl().
-                onStartCompletion(application -> {
-
-                    HttpClient client = HttpClient.newHttpClient();
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .header("Authorization", "Bearer " + JWT_TOKEN_USER)
-                            .uri(URI.create("http://localhost:8080/api/admin/"))
-                            .GET()
-                            .build();
-
-                    try {
-                        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                        assertEquals(403, response.statusCode());
-                    } catch (Throwable e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        application.stop();
-                    }
-                })
-                .start(8080);
-
-        app.handleCompletionHandlerFailure();
-    }
-
     @SuppressWarnings("SameReturnValue")
     static class HelloWorld extends Application {
+        public static void main(String[] args) {
+            new HelloWorld().start();
+        }
+
         @GET(value = "/*")
         String hello() {
             return "Hello World!";
-        }
-
-        public static void main(String[] args) {
-            new HelloWorld().start();
         }
     }
 }

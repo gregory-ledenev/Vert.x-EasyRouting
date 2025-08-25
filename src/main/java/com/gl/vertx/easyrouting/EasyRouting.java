@@ -61,8 +61,8 @@ import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
  *
- * @version 0.9.9
- * @since 0.9.9
+ * @version 0.9.10
+ * @since 0.9.10
  */
 public class EasyRouting {
     /**
