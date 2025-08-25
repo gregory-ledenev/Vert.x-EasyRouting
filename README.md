@@ -302,7 +302,9 @@ new TestApplication().
         start();
 ```
 
-Sample use of template processing:
+To define  model for templates - specify a `TemplateModel` parameter and put all required properties should be utilized 
+by the Template Engine to render templates. Sample use of template processing:
+
 ```java
 @GET("/*")
 @Template @FileFromFolder("documents")
