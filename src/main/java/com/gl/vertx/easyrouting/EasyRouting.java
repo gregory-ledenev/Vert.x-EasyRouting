@@ -592,7 +592,7 @@ public class EasyRouting {
                 i++;
             }
 
-            CompositeFutureImpl.all(futures.toArray(new Future[]{})).onComplete((aCompositeFuture, aThrowable) -> {
+            Future.all(futures).onComplete((aCompositeFuture, aThrowable) -> {
                 try {
                     if (handlerMethod.method().isAnnotationPresent(Blocking.class)) {
                         invokeHandlerMethodBlocking(ctx, handlerMethod, args);

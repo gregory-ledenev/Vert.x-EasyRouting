@@ -15,7 +15,7 @@ Key Highlights:
 - Automatic parameter binding and response handling.
 - Use plain Java objects; no manual JSON serialization needed.
 - Minimal setup; start by extending the `Application` class and calling `start()`.
-- Designed for easy learning with no need to learn Vert.x to get started.
+- Designed for easy learning with no need to learn .x to get started.
 
 Get started in minutes and build clean, maintainable web apps with less 
 boilerplate code. Here’s literally all it takes:
@@ -100,8 +100,8 @@ There is a special `Application` class that allows building applications with ea
 for production, prototyping and testing purposes without learning how to create 
 a full Vert.x application:
 
-1. Make your class extend `Application` and is **public**.
-2. Write regular methods for your app’s logic, add simple annotations for HTTP
+1. Make your class extend `Application` and keep it **public**.
+2. Write regular **public** methods for your app’s logic, add simple annotations for HTTP
    verbs and paths.
 3. Use Java objects for parameters and return values - no dealing with JSON.
 4. Optionally, mark method parameters to bind query/form stuff if you want.
@@ -507,14 +507,30 @@ public String get(@PathParam("path") String path) {
 #### @Template
 
 Use `@Template` to specify that file returned by a method should be processed by a template engine; works only together with 
-`@FileFromFolder`. Note: Template Engine will process only path results that represent HTML files; files with other types 
-or textual results will be ignored. To make templates work, a Template Engine should be registered with an `Application` 
+`@FileFromFolder`. To make templates work, a Template Engine should be registered with an `Application` 
 or passed to `EasyRouter.setupController(...)` method.
 
 ```java
+new TestApplication().
+    templateEngine(TemplateEngineFactory.Type.Thymeleaf).
+    start();
+....
+
 @GET("/*")
 @Template @FileFromFolder("documents")
 public String get(@PathParam("path") String path, TemplateModel templateModel) {
+    templateModel.put("title", "SOME CUSTOM TITLE");
+    return path;
+}
+```
+
+By default, only HTML files will be processed, but you may specify other content types to process for `@Template`
+annotation:
+
+```java
+@GET("/*")
+@Template({"text/css"}) @FileFromFolder("documents")
+String get(@PathParam("path") String path, TemplateModel templateModel) {
     templateModel.put("title", "SOME CUSTOM TITLE");
     return path;
 }

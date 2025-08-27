@@ -199,6 +199,21 @@ public class TestApplication {
     }
 
     @Test
+    void testJsonExceptionMethod() throws Throwable {
+        testPOST(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/test",
+                builder -> builder
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + JWT_TOKEN_USER_ADMIN),
+                """
+                {"jsonrpc": "2.0", "method": "exceptionMethod", "params": {"a":2, "b":3}, "id": 2}""",
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("""
+                                 {"jsonrpc":"2.0","id":"2","error":{"code":-32000,"message":"ERROR"}}""", response.body());
+                });
+    }
+
+    @Test
     void testJsonNotification() throws Throwable {
         testPOST(() -> new TestApplicationImpl().module(new JsonRpcTestApplicationModule()), 8080, "api/jsonrpc/test",
                 builder -> builder
@@ -611,6 +626,11 @@ public class TestApplication {
         @SuppressWarnings("EmptyMethod")
         @Description("A void method that does nothing")
         public void voidMethod(@Param("a") int a, @Param("b") int b) {
+        }
+
+        @Description("Am exception method")
+        public void exceptionMethod(@Param("a") int a, @Param("b") int b) {
+            throw new RuntimeException("ERROR");
         }
 
         @Blocking
