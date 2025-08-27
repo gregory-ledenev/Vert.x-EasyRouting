@@ -59,7 +59,7 @@ To add EasyRouting to your build system, you can use the following Maven depende
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.10</version>
+    <version>0.9.12</version>
 </dependency>
 ```
 To add JavaDoc:
@@ -67,7 +67,7 @@ To add JavaDoc:
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.10</version>
+    <version>0.9.12</version>
     <classifier>javadoc</classifier>
 </dependency>
 ```
@@ -337,8 +337,8 @@ public static void main(String[] args) {
 }
 ```
 Need another service? Just add `@ClusterNodeURI` to a method parameter - EasyRouting injects the right URI for you. You 
-may use Vert.x `HttpClient` to make async. use of other services. Or you may annotate a method with `@Blocking` and use
-standard sync. `HttpClient`, supplied by Java, to make sync. implementation for prototyping and quick entry.
+may use Vert.x `WebClient` to make asynchronous use of other services. Or you may annotate a method with `@Blocking` and use
+standard synchronous `HttpClient`, supplied by Java, to make synchronous implementation for prototyping and quick entry.
 ```java
 @GET("/hello")
 public String hello(@ClusterNodeURI("node1") URI uri1, @ClusterNodeURI("node2") URI uri2) {
@@ -346,6 +346,8 @@ public String hello(@ClusterNodeURI("node1") URI uri1, @ClusterNodeURI("node2") 
     return "Hello Clustering and Microservices";
 }
 ```
+Application provides cached instances of `CircuitBreaker` that can be used to guard calls to other services. Use `getCircuitBreaker()` to get a `CircuitBreaker` for a node. You may specify the configuration for all managed `CircuitBreaker`'s using the `circuitBreaker()` method.
+
 ## Using With Vert.x Router
 
 If `Application` is too simple for your needs, or if you want to use and mix
@@ -400,13 +402,16 @@ method annotations:
 - `@DELETE(path)` - For HTTP DELETE requests
 - `@PATCH(path)` - For HTTP PATCH requests
 
+If the code in handler methods is synchronous — obtain results and return them. Otherwise - prepare and return `Future`s to allow retrieving asynchronous results. Use `@Blocking` annotation to mark methods that should be executed as blocking
+operations.
+
 ### Annotating Methods
 
 #### @GET, @POST, @PUT, @DELETE, @PATCH
 
 Use `@GET`, `@POST`, `@PUT`, `@DELETE`, or `@PATCH` annotations to define
 handler methods for specific HTTP methods. The `value` parameter specifies the
-URL path for the handler. You may use the the optional `requiredRoles` parameter
+URL path for the handler. You may use the optional `requiredRoles` parameter
 to specify required roles for the method, which will be checked during JWT
 authentication. If nor roles are specified, the method will be accessible to all
 authenticated users.

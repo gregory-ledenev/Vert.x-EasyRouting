@@ -96,6 +96,11 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     private Record publishedRecord;
     private static final Map<String, CircuitBreaker> circuitBreakerCache = new ConcurrentHashMap<>();
     private static final Map<String, HttpClient> httpClientCache = new ConcurrentHashMap<>();
+    private CircuitBreakerOptions circuitBreakerOptions = new CircuitBreakerOptions()
+            .setMaxFailures(3)
+            .setTimeout(5000)
+            .setFallbackOnFailure(true)
+            .setResetTimeout(10000);;
 
     @Override
     public EasyRouting.AnnotatedConverters getAnnotatedConverters() {
@@ -271,6 +276,7 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     public Application clustered(String nodeName) {
         this.nodeName = nodeName;
         this.clustered = true;
+
         return this;
     }
 
@@ -669,13 +675,27 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
         return serviceDiscovery;
     }
 
+    /**
+     * Specifies {@code CircuitBreakerOptions} for all managed {@code CircuitBreaker}'s and associates them with the application
+     *
+     * @param circuitBreakerOptions circuit breaker options
+     * @return the current {@code Application} instance, allowing for method chaining
+     */
+    public Application circuitBreaker(CircuitBreakerOptions circuitBreakerOptions) {
+        this.circuitBreakerOptions = circuitBreakerOptions;
+
+        return this;
+    }
+
+    /**
+     * Retrieves a {@link CircuitBreaker} instance by name, creating it if it does not exist.
+     * The circuit breaker is configured with default options (if they are not explicitly specified via {@code circuitBreaker}):
+     * max failures = 3, timeout = 5000ms, fallback on failure enabled, reset timeout = 10000ms.
+     *
+     * @param name the name of the circuit breaker
+     * @return the {@link CircuitBreaker} instance associated with the given name
+     */
     public CircuitBreaker getCircuitBreaker(String name) {
-        return circuitBreakerCache.computeIfAbsent(name, key -> CircuitBreaker.create(key, vertx,
-                new CircuitBreakerOptions()
-                        .setMaxFailures(3)
-                        .setTimeout(5000)
-                        .setFallbackOnFailure(true)
-                        .setResetTimeout(10000)
-        ));
+        return circuitBreakerCache.computeIfAbsent(name, key -> CircuitBreaker.create(key, vertx, circuitBreakerOptions));
     }
 }

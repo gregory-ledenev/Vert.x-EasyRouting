@@ -161,7 +161,7 @@ public abstract class RpcContext {
         return result;
     }
 
-    public static class RpcException extends Exception {
+    public static class RpcException extends RuntimeException {
         /**
          * Exception class representing an error that occurred during RPC processing.
          * This exception encapsulates an {@code RpcResponse} that can be used to form

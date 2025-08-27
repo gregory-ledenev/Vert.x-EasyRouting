@@ -65,14 +65,14 @@ import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
  *
- * @version 0.9.11
- * @since 0.9.11
+ * @version 0.9.12
+ * @since 0.9.12
  */
 public class EasyRouting {
     /**
      * Current version of the EasyRouting library.
      */
-    public static final String VERSION = "0.9.9";
+    public static final String VERSION = "0.9.12";
     public static final String REDIRECT = "redirect:";
     private static final Logger logger = LoggerFactory.getLogger(EasyRouting.class);
     private static final String ERROR_HANDLING_ANNOTATED_METHOD = "Error handling annotated method: {0}({1}). Error: {2}";
@@ -366,7 +366,7 @@ public class EasyRouting {
             this.annotatedConverters = setupAnnotatedConverters(target);
         }
 
-        private static void errorHandlerInvocation(Annotation annotation, Set<String> parameterNames, Exception exception) {
+        private static void errorHandlerInvocation(Annotation annotation, Set<String> parameterNames, Throwable exception) {
             logger.error(MessageFormat.format(ERROR_HANDLING_ANNOTATED_METHOD,
                     annotation,
                     String.join(", ", parameterNames),
@@ -489,7 +489,6 @@ public class EasyRouting {
         }
 
         public void handle(RoutingContext ctx) {
-
             try {
                 obtainRpcContext(ctx, target);
 
@@ -522,15 +521,8 @@ public class EasyRouting {
                 } else {
                     throw new HttpException(403, "Access denied"); // exception to let failure handler handle it
                 }
-            } catch (RpcContext.RpcException e) {
-                e.getRpcResponse().handle(ctx);
-                logger.error("Failed to get RpcContext", e);
-            } catch (HttpException e) {
-                errorHandlerInvocation(annotation, ctx.request().params().names(), e);
-                throw e;
-            } catch (Exception e) {
-                errorHandlerInvocation(annotation, ctx.request().params().names(), e);
-                throw new HttpException(500, e);
+            } catch (Exception ex) {
+                handleExceptions(ctx, ex);
             }
         }
 
@@ -542,11 +534,29 @@ public class EasyRouting {
             return false;
         }
 
+        private void handleExceptions(RoutingContext ctx, Throwable ex) {
+            if (ex instanceof RpcContext.RpcException rpcException) {
+                rpcException.getRpcResponse().handle(ctx);
+                logger.error(ex.getMessage(), ex);
+            } else if (ex instanceof HttpException httpException) {
+                errorHandlerInvocation(annotation, ctx.request().params().names(), ex);
+                throw httpException;
+            } else {
+                RpcContext rpcContext = RpcContext.getRpcContext(ctx);
+                if (rpcContext != null) {
+                    rpcContext.getErrorMethodInvocationRpcResponse(ex).handle(ctx);
+                } else {
+                    errorHandlerInvocation(annotation, ctx.request().params().names(), ex);
+                    ctx.fail(500, ex);
+                }
+            }
+        }
+
         private void invokeHandlerMethod(RoutingContext ctx, MethodResult handlerMethod, Object[] args) {
             try {
                 boolean needFetchArguments = serviceDiscovery != null &&
                         isParametersAnnotationPresent(handlerMethod.method(), ClusterNodeURI.class);
-                if (handlerMethod.method().isAnnotationPresent(Blocking.class) && ! needFetchArguments) {
+                if (handlerMethod.method().isAnnotationPresent(Blocking.class) && !needFetchArguments) {
                     invokeHandlerMethodBlocking(ctx, handlerMethod, args);
                 } else if (needFetchArguments) {
                     invokeHandlerMethodFetchArguments(ctx, handlerMethod, args);
@@ -590,12 +600,7 @@ public class EasyRouting {
                         invokeHandlerMethodNonBlocking(ctx, handlerMethod, args);
                     }
                 } catch (Exception e) {
-                    RpcContext rpcContext = RpcContext.getRpcContext(ctx);
-                    if (rpcContext != null) {
-                        rpcContext.getErrorMethodInvocationRpcResponse(e).handle(ctx);
-                    } else {
-                        throw new RuntimeException(e);
-                    }
+                    handleExceptions(ctx, e);
                 }
             });
         }
@@ -611,23 +616,15 @@ public class EasyRouting {
                 try {
                     return handlerMethod.method().invoke(target, args);
                 } catch (Exception e) {
-                    throw new RuntimeException(e);
+                    handleExceptions(ctx, e);
+                    return null;
                 }
             });
             future.onComplete((result, e) -> {
                 if (e == null) {
                     processHandlerResult(handlerMethod.method(), ctx, result);
                 } else {
-                    logger.error("Error during blocking method invocation", e);
-                    RpcContext rpcContext = RpcContext.getRpcContext(ctx);
-                    if (rpcContext != null) {
-                        rpcContext.getErrorMethodInvocationRpcResponse(e).handle(ctx);
-                    } else {
-                        String message = e.getMessage();
-                        if (e.getCause() instanceof InvocationTargetException ie)
-                            message = ie.getTargetException().getMessage();
-                        ctx.response().setStatusCode(500).end(message);
-                    }
+                    handleExceptions(ctx, e);
                 }
             });
         }
@@ -822,7 +819,26 @@ public class EasyRouting {
 
         @SuppressWarnings({"rawtypes", "unchecked"})
         private void processHandlerResult(Method method, RoutingContext ctx, Object result) {
-            Result handlerResult = result instanceof Result<?> ? (Result<?>) result : new Result(result);
+            try {
+                if (result instanceof Future future) {
+                    future.onComplete((futureResult, ex) -> {
+                        if (ex == null) {
+                            processHandlerResultNotFuture(method, ctx, futureResult);
+                        } else {
+                            handleExceptions(ctx, ex);
+                        }
+                    });
+                } else {
+                    processHandlerResultNotFuture(method, ctx, result);
+                }
+            } catch (Exception ex) {
+                handleExceptions(ctx, ex);
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        private void processHandlerResultNotFuture(Method method, RoutingContext ctx, Object result) {
+            Result<Object> handlerResult = result instanceof Result<?> ? (Result<Object>) result : new Result<>(result);
             handlerResult.setResultClass(method.getReturnType());
             handlerResult.setAnnotations(method.getAnnotations());
             applyHttpHeaders(method, handlerResult);
