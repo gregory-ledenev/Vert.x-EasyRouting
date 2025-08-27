@@ -65,8 +65,8 @@ import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
  *
- * @version 0.9.10
- * @since 0.9.10
+ * @version 0.9.11
+ * @since 0.9.11
  */
 public class EasyRouting {
     /**
@@ -544,10 +544,11 @@ public class EasyRouting {
 
         private void invokeHandlerMethod(RoutingContext ctx, MethodResult handlerMethod, Object[] args) {
             try {
-                boolean needFetchArguments = isParametersAnnotationPresent(handlerMethod.method(), ClusterNodeURI.class);
+                boolean needFetchArguments = serviceDiscovery != null &&
+                        isParametersAnnotationPresent(handlerMethod.method(), ClusterNodeURI.class);
                 if (handlerMethod.method().isAnnotationPresent(Blocking.class) && ! needFetchArguments) {
                     invokeHandlerMethodBlocking(ctx, handlerMethod, args);
-                } else if (isParametersAnnotationPresent(handlerMethod.method(), ClusterNodeURI.class)) {
+                } else if (needFetchArguments) {
                     invokeHandlerMethodFetchArguments(ctx, handlerMethod, args);
                 } else {
                     invokeHandlerMethodNonBlocking(ctx, handlerMethod, args);

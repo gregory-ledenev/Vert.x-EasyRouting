@@ -26,44 +26,42 @@
 
 package com.gl.vertx.easyrouting;
 
-import com.gl.vertx.easyrouting.annotations.Blocking;
 import com.gl.vertx.easyrouting.annotations.ClusterNodeURI;
-import com.gl.vertx.easyrouting.annotations.Template;
-import io.vertx.circuitbreaker.CircuitBreaker;
-import io.vertx.circuitbreaker.CircuitBreakerOptions;
-import io.vertx.core.buffer.Buffer;
-import io.vertx.core.http.HttpClientRequest;
-import io.vertx.core.http.HttpClientResponse;
-import io.vertx.core.http.HttpMethod;
-import io.vertx.core.json.JsonObject;
-import io.vertx.servicediscovery.types.HttpEndpoint;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.Optional;
 
 import static com.gl.vertx.easyrouting.TestApplication.JWT_TOKEN_USER_ADMIN;
 import static com.gl.vertx.easyrouting.TestApplication.TestApplicationImpl.JWT_PASSWORD;
-import static com.gl.vertx.easyrouting.UserAdminApplication.JWT_SECRET;
 import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 
 public class HelloWorld extends Application {
-    @GET("/hello")
-    public String hello(@ClusterNodeURI("node1") URI uri1, @ClusterNodeURI("node2") URI uri2) {
-        // add here your code that calls microservices
-        return "Hello Clustering and Microservices";
+    @GET("/")
+    public String hello(@ClusterNodeURI("node1") URI node1, @ClusterNodeURI("node2") URI node2) {
+        String message = "Hello, World!";
+        //add here your code that calls microservices
+        return message;
     }
 
     public static void main(String[] args) {
+        if (args.length > 0)
+            port = Integer.parseInt(args[0]);
+        if (args.length > 1)
+            helloMessage = args[1];
+        if (args.length > 2)
+            nodeName = args[2];
         new HelloWorld()
-                .clustered("mainNode")
-                .start();
+                .clustered(nodeName)
+                .start(port);
     }
+    private static int port = 8080;
+    private static String helloMessage;
+    private static String nodeName;
 }
 
 class HelloWorldAppTest {

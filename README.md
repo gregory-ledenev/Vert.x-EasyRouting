@@ -327,8 +327,7 @@ String get(@PathParam("path") String path, TemplateModel templateModel) {
 
 ### Clustering Support
 
-EasyRouting `Application` includes support of clustering; cluster creation, node registration etc. automatically handled by EasyRouting. Use `Application.clustered(String)` method to run application
-in clustered mode.
+EasyRouting `Application` includes support of clustering; cluster creation, node registration etc. automatically handled by EasyRouting. Use `Application.clustered(String)` method to run application in clustered mode.
 
 ```java
 public static void main(String[] args) {
@@ -337,8 +336,16 @@ public static void main(String[] args) {
             .start();
 }
 ```
-
-
+Need another service? Just add `@ClusterNodeURI` to a method parameter - EasyRouting injects the right URI for you. You 
+may use Vert.x `HttpClient` to make async. use of other services. Or you may annotate a method with `@Blocking` and use
+standard sync. `HttpClient`, supplied by Java, to make sync. implementation for prototyping and quick entry.
+```java
+@GET("/hello")
+public String hello(@ClusterNodeURI("node1") URI uri1, @ClusterNodeURI("node2") URI uri2) {
+    // add here your code that calls microservices
+    return "Hello Clustering and Microservices";
+}
+```
 ## Using With Vert.x Router
 
 If `Application` is too simple for your needs, or if you want to use and mix
