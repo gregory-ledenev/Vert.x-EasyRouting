@@ -53,7 +53,7 @@ public class RpcController {
      */
     public RpcController(Object target) {
         this.target = target;
-        routingContextHandler = new EasyRouting.RoutingContextHandler(null, target, null);
+        routingContextHandler = new EasyRouting.RoutingContextHandler(null, target, null, null);
     }
 
     /**

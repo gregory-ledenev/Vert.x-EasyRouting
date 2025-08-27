@@ -325,6 +325,20 @@ String get(@PathParam("path") String path, TemplateModel templateModel) {
 }
 ```
 
+### Clustering Support
+
+EasyRouting `Application` includes support of clustering; cluster creation, node registration etc. automatically handled by EasyRouting. Use `Application.clustered(String)` method to run application
+in clustered mode.
+
+```java
+public static void main(String[] args) {
+    new HelloWorld()
+            .clustered("mainNode")
+            .start();
+}
+```
+
+
 ## Using With Vert.x Router
 
 If `Application` is too simple for your needs, or if you want to use and mix
@@ -602,6 +616,10 @@ Use the `@HeaderParam` annotation to bind a method parameter to an HTTP request 
 #### @CookieParam
 
 Use the `@CookieParam` annotation to bind a method parameter to a specific cookie value.
+
+#### @ClusterNodeURI
+
+Use the `@ClusterNodeURI` annotation to bind a method parameter to an `URI` of a cluster node endpoint
 
 ### Returning Results
 

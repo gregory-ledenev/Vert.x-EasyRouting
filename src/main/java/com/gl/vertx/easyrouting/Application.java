@@ -24,24 +24,29 @@ SOFTWARE.
 
 package com.gl.vertx.easyrouting;
 
-import io.vertx.core.AbstractVerticle;
-import io.vertx.core.Promise;
-import io.vertx.core.Vertx;
-import io.vertx.core.http.HttpServerOptions;
+import io.vertx.circuitbreaker.CircuitBreaker;
+import io.vertx.circuitbreaker.CircuitBreakerOptions;
+import io.vertx.core.*;
+import io.vertx.core.http.*;
+import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.JksOptions;
 import io.vertx.core.net.PemKeyCertOptions;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.common.template.TemplateEngine;
 import io.vertx.ext.web.handler.BodyHandler;
+import io.vertx.servicediscovery.Record;
+import io.vertx.servicediscovery.ServiceDiscovery;
+import io.vertx.servicediscovery.types.HttpEndpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Scanner;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -85,6 +90,12 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     private TemplateEngineFactory.Type templateEngineType = TemplateEngineFactory.Type.UNKNOWN;
     private BiConsumer<TemplateEngine, TemplateEngineFactory.Type> templateEngineConfigurator;
     private TemplateEngine templateEngine;
+    private boolean clustered;
+    private String nodeName;
+    private ServiceDiscovery serviceDiscovery;
+    private Record publishedRecord;
+    private static final Map<String, CircuitBreaker> circuitBreakerCache = new ConcurrentHashMap<>();
+    private static final Map<String, HttpClient> httpClientCache = new ConcurrentHashMap<>();
 
     @Override
     public EasyRouting.AnnotatedConverters getAnnotatedConverters() {
@@ -188,6 +199,7 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
 
     /**
      * Starts the application on a default port: 8080 or 8443 for SSL/TLS.
+     * @return the current {@code Application} instance, allowing for method chaining
      */
     public <T extends Application> T start() {
         start(0);
@@ -199,6 +211,7 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
      * Starts the application on the specified port.
      *
      * @param port the port number on which to start the server
+     * @return the current {@code Application} instance, allowing for method chaining
      */
     public <T extends Application> T start(int port) {
         start(port, "localhost");
@@ -210,6 +223,7 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
      *
      * @param port the port number on which to start the server
      * @param host the hostname or IP address to which the server will bind (e.g., "localhost" or "0.0.0.0")
+     * @return the current {@code Application} instance, allowing for method chaining
      */
     @SuppressWarnings("UnusedReturnValue")
     public <T extends Application> T start(int port, String host) {
@@ -219,14 +233,56 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
             this.host = host;
             this.port = port;
             applicationVerticle = new ApplicationVerticle();
-            vertx = Vertx.vertx();
-            vertx.deployVerticle(applicationVerticle);
+
+            if (!clustered) {
+                vertx = Vertx.vertx();
+                vertx.deployVerticle(applicationVerticle);
+            } else {
+                startClustered();
+            }
             startWaiting();
         } else {
             logger.warn("Application is already running on port: " + this.port);
         }
 
         return self();
+    }
+
+    private void startClustered() {
+        Vertx.clusteredVertx(new VertxOptions()).onComplete(res -> {
+            if (res.succeeded()) {
+                vertx = res.result();
+                serviceDiscovery = ServiceDiscovery.create(vertx);
+                vertx.deployVerticle(applicationVerticle);
+                publishService(serviceDiscovery, nodeName);
+            } else {
+                System.err.println("Failed to start Vert.x in clustered mode: " + res.cause().getMessage());
+            }
+        });
+    }
+
+    /**
+     * Enables clustered mode for the application, allowing it to join a Vert.x cluster.
+     * This registers the node with the specified name in the cluster.
+     *
+     * @param nodeName the name to register this node under in the cluster
+     * @return the current {@code Application} instance for method chaining
+     */
+    public Application clustered(String nodeName) {
+        this.nodeName = nodeName;
+        this.clustered = true;
+        return this;
+    }
+
+    private void publishService(ServiceDiscovery discovery, String name) {
+        discovery.publish(HttpEndpoint.createRecord(name, host, port, "/")).onComplete((aRecord, ex) -> {
+            if (ex== null) {
+                this.publishedRecord =  aRecord;
+                logger.info("Service published with ID: " + aRecord.getRegistration());
+            } else {
+                logger.error("Cannot publish " + name + ": " + ex.getMessage(), ex);
+            }
+        });
     }
 
     /**
@@ -586,12 +642,40 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
             for (ApplicationModule<?> applicationModule : applicationModules)
                 applicationModule.setupController(router);
 
-            EasyRouting.setupController(router, Application.this, getTemplateEngine());
+            EasyRouting.setupController(router, Application.this, getTemplateEngine(), getServiceDiscovery());
             new RpcController(Application.this).setupController(router);
 
             createHttpServer(startPromise, router, port);
 
             startedImpl();
         }
+
+        @Override
+        public void stop() throws Exception {
+            if (serviceDiscovery != null && publishedRecord != null) {
+                serviceDiscovery.unpublish(publishedRecord.getRegistration()).onComplete((aUnused, aThrowable) -> {
+                    serviceDiscovery.close();
+                });
+            }
+            super.stop();
+        }
+    }
+
+    public String getNodeName() {
+        return nodeName;
+    }
+
+    public ServiceDiscovery getServiceDiscovery() {
+        return serviceDiscovery;
+    }
+
+    public CircuitBreaker getCircuitBreaker(String name) {
+        return circuitBreakerCache.computeIfAbsent(name, key -> CircuitBreaker.create(key, vertx,
+                new CircuitBreakerOptions()
+                        .setMaxFailures(3)
+                        .setTimeout(5000)
+                        .setFallbackOnFailure(true)
+                        .setResetTimeout(10000)
+        ));
     }
 }

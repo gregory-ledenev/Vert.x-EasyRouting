@@ -27,15 +27,23 @@
 package com.gl.vertx.easyrouting;
 
 import com.gl.vertx.easyrouting.annotations.Blocking;
-import com.gl.vertx.easyrouting.annotations.HttpMethods;
-import com.gl.vertx.easyrouting.annotations.Rpc;
+import com.gl.vertx.easyrouting.annotations.ClusterNodeURI;
 import com.gl.vertx.easyrouting.annotations.Template;
+import io.vertx.circuitbreaker.CircuitBreaker;
+import io.vertx.circuitbreaker.CircuitBreakerOptions;
+import io.vertx.core.buffer.Buffer;
+import io.vertx.core.http.HttpClientRequest;
+import io.vertx.core.http.HttpClientResponse;
+import io.vertx.core.http.HttpMethod;
+import io.vertx.core.json.JsonObject;
+import io.vertx.servicediscovery.types.HttpEndpoint;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Optional;
 
 import static com.gl.vertx.easyrouting.TestApplication.JWT_TOKEN_USER_ADMIN;
 import static com.gl.vertx.easyrouting.TestApplication.TestApplicationImpl.JWT_PASSWORD;
@@ -45,15 +53,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 
 public class HelloWorld extends Application {
-    @Template
-    @GET("/*")
-    public String hello() {
-        return "Hello, World!";
+    @GET("/hello")
+    public String hello(@ClusterNodeURI("node1") URI uri1, @ClusterNodeURI("node2") URI uri2) {
+        // add here your code that calls microservices
+        return "Hello Clustering and Microservices";
     }
 
     public static void main(String[] args) {
         new HelloWorld()
-                .jwtAuth(JWT_SECRET, "/*")
+                .clustered("mainNode")
                 .start();
     }
 }
