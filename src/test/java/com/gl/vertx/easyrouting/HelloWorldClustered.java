@@ -45,7 +45,9 @@ import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 public class HelloWorldClustered extends Application {
     @Blocking
     @GET("/blocking")
-    public String helloBlocking(@ClusterNodeURI("node1") URI node1, @ClusterNodeURI("node2") URI node2) {
+    public String helloBlocking(@ClusterNodeURI("node1") URI node1,
+                                @ClusterNodeURI("node2") URI node2,
+                                @ClusterNodeURI("mainNode") URI mainNode) {
         if (! nodeName.equals("mainNode"))
             return "Hello from node: " + nodeName;
 

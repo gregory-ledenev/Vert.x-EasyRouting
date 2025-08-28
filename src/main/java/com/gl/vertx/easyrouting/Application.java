@@ -67,7 +67,7 @@ import java.util.function.Consumer;
  *     }
  * }</pre>
  */
-public class Application implements EasyRouting.AnnotatedConvertersHolder, ApplicationObject {
+public class Application implements EasyRouting.AnnotatedConvertersHolder, EasyRoutingContext, ApplicationObject {
     private static final Object shutdownLock = new Object();
     private final Logger logger = LoggerFactory.getLogger(getClass());
     private final List<ApplicationModule<?>> applicationModules = new ArrayList<>();
@@ -105,6 +105,11 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     @Override
     public EasyRouting.AnnotatedConverters getAnnotatedConverters() {
         return annotatedConverters;
+    }
+
+    @Override
+    public Record getPublishedRecord() {
+        return publishedRecord;
     }
 
     @SuppressWarnings("unchecked")
@@ -281,9 +286,10 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, Appli
     }
 
     private void publishService(ServiceDiscovery discovery, String name) {
-        discovery.publish(HttpEndpoint.createRecord(name, host, port, "/")).onComplete((aRecord, ex) -> {
+        Record record = HttpEndpoint.createRecord(name, host, port, "/");
+        discovery.publish(record).onComplete((aRecord, ex) -> {
             if (ex== null) {
-                this.publishedRecord =  aRecord;
+                this.publishedRecord = aRecord;
                 logger.info("Service published with ID: " + aRecord.getRegistration());
             } else {
                 logger.error("Cannot publish " + name + ": " + ex.getMessage(), ex);

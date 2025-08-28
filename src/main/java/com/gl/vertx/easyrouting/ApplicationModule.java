@@ -27,6 +27,9 @@
 package com.gl.vertx.easyrouting;
 
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.common.template.TemplateEngine;
+import io.vertx.servicediscovery.Record;
+import io.vertx.servicediscovery.ServiceDiscovery;
 
 /**
  * Base class for application modules that can be registered with an {@link Application}.
@@ -37,7 +40,7 @@ import io.vertx.ext.web.Router;
  * @see Application
  */
 public abstract class ApplicationModule<T extends Application>
-        implements EasyRouting.AnnotatedConvertersHolder, ApplicationObject {
+        implements EasyRoutingContext, ApplicationObject {
     protected T application;
     private final String[] protectedRoutes;
     private final Object controller;
@@ -45,6 +48,21 @@ public abstract class ApplicationModule<T extends Application>
     @Override
     public EasyRouting.AnnotatedConverters getAnnotatedConverters() {
         return application.getAnnotatedConverters();
+    }
+
+    @Override
+    public TemplateEngine getTemplateEngine() {
+        return application.getTemplateEngine();
+    }
+
+    @Override
+    public ServiceDiscovery getServiceDiscovery() {
+        return application.getServiceDiscovery();
+    }
+
+    @Override
+    public Record getPublishedRecord() {
+        return application.getPublishedRecord();
     }
 
     public T getApplication() {

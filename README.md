@@ -59,7 +59,7 @@ To add EasyRouting to your build system, you can use the following Maven depende
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.12</version>
+    <version>0.9.13</version>
 </dependency>
 ```
 To add JavaDoc:
@@ -67,7 +67,7 @@ To add JavaDoc:
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.12</version>
+    <version>0.9.13</version>
     <classifier>javadoc</classifier>
 </dependency>
 ```

@@ -33,7 +33,6 @@ import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.Cookie;
 import io.vertx.core.http.HttpMethod;
-import io.vertx.core.impl.future.CompositeFutureImpl;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Route;
@@ -65,8 +64,8 @@ import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
  *
- * @version 0.9.12
- * @since 0.9.12
+ * @version 0.9.13
+ * @since 0.9.13
  */
 public class EasyRouting {
     /**
@@ -101,11 +100,11 @@ public class EasyRouting {
                                        ServiceDiscovery serviceDiscovery) {
         Objects.requireNonNull(router);
         Objects.requireNonNull(target);
-        setupController(router, GET.class, target, templateEngine, serviceDiscovery);
-        setupController(router, POST.class, target, templateEngine, serviceDiscovery);
-        setupController(router, DELETE.class, target, templateEngine, serviceDiscovery);
-        setupController(router, PUT.class, target, templateEngine, serviceDiscovery);
-        setupController(router, PATCH.class, target, templateEngine, serviceDiscovery);
+        setupController(router, GET.class, target);
+        setupController(router, POST.class, target);
+        setupController(router, DELETE.class, target);
+        setupController(router, PUT.class, target);
+        setupController(router, PATCH.class, target);
 
         setupFailureHandler(router, target);
 
@@ -262,12 +261,10 @@ public class EasyRouting {
         return count;
     }
 
-    private static void setupRpcRequestsHandler(Router router, Object target,
-                                                TemplateEngine templateEngine,
-                                                ServiceDiscovery serviceDiscovery) {
+    private static void setupRpcRequestsHandler(Router router, Object target) {
         Rpc rpc = target.getClass().getAnnotation(Rpc.class);
         if (rpc != null) {
-            router.post(rpc.path()).handler(createHandler(rpc, target, templateEngine, serviceDiscovery));
+            router.post(rpc.path()).handler(createHandler(rpc, target));
         }
     }
 
@@ -278,9 +275,7 @@ public class EasyRouting {
      * @param annotationClass the HTTP method annotation class to process
      * @param target          the object containing annotated handler methods
      */
-    private static void setupController(Router router, Class<? extends Annotation> annotationClass, Object target,
-                                        TemplateEngine templateEngine,
-                                        ServiceDiscovery serviceDiscovery) {
+    private static void setupController(Router router, Class<? extends Annotation> annotationClass, Object target) {
         Set<String> installedHandlers = new HashSet<>();
 
         try {
@@ -297,15 +292,15 @@ public class EasyRouting {
                         installedHandlers.add(installedHandlerKey);
 
                         if (annotationClass == GET.class)
-                            router.get(path).handler(createHandler(annotation, target, templateEngine, serviceDiscovery));
+                            router.get(path).handler(createHandler(annotation, target));
                         else if (annotationClass == POST.class)
-                            router.post(path).handler(createHandler(annotation, target, templateEngine, serviceDiscovery));
+                            router.post(path).handler(createHandler(annotation, target));
                         else if (annotationClass == DELETE.class)
-                            router.delete(path).handler(createHandler(annotation, target, templateEngine, serviceDiscovery));
+                            router.delete(path).handler(createHandler(annotation, target));
                         else if (annotationClass == PUT.class)
-                            router.put(path).handler(createHandler(annotation, target, templateEngine, serviceDiscovery));
+                            router.put(path).handler(createHandler(annotation, target));
                         else if (annotationClass == PATCH.class)
-                            router.patch(path).handler(createHandler(annotation, target, templateEngine, serviceDiscovery));
+                            router.patch(path).handler(createHandler(annotation, target));
                     }
                 }
             }
@@ -331,10 +326,8 @@ public class EasyRouting {
         return result;
     }
 
-    private static Handler<RoutingContext> createHandler(Annotation annotation, Object target,
-                                                         TemplateEngine templateEngine,
-                                                         ServiceDiscovery serviceDiscovery) {
-        return new RoutingContextHandler(annotation, target, templateEngine, serviceDiscovery);
+    private static Handler<RoutingContext> createHandler(Annotation annotation, Object target) {
+        return new RoutingContextHandler(annotation, target);
     }
 
     /**
@@ -355,15 +348,23 @@ public class EasyRouting {
         private final Annotation annotation;
         private final Object target;
         private final AnnotatedConverters annotatedConverters;
-        private final TemplateEngine templateEngine;
-        private final ServiceDiscovery serviceDiscovery;
 
-        public RoutingContextHandler(Annotation annotation, Object target, TemplateEngine templateEngine, ServiceDiscovery serviceDiscovery) {
+        public RoutingContextHandler(Annotation annotation, Object target) {
             this.annotation = annotation;
             this.target = target;
-            this.templateEngine = templateEngine;
-            this.serviceDiscovery = serviceDiscovery;
             this.annotatedConverters = setupAnnotatedConverters(target);
+        }
+
+        private TemplateEngine getTemplateEngine() {
+            return target instanceof EasyRoutingContext easyRoutingContext ? easyRoutingContext.getTemplateEngine() : null;
+        }
+
+        private ServiceDiscovery getServiceDiscovery() {
+            return target instanceof EasyRoutingContext easyRoutingContext ? easyRoutingContext.getServiceDiscovery() : null;
+        }
+
+        private Record getPublishedRecord() {
+            return target instanceof EasyRoutingContext easyRoutingContext ? easyRoutingContext.getPublishedRecord() : null;
         }
 
         private static void errorHandlerInvocation(Annotation annotation, Set<String> parameterNames, Throwable exception) {
@@ -554,7 +555,7 @@ public class EasyRouting {
 
         private void invokeHandlerMethod(RoutingContext ctx, MethodResult handlerMethod, Object[] args) {
             try {
-                boolean needFetchArguments = serviceDiscovery != null &&
+                boolean needFetchArguments = getServiceDiscovery() != null &&
                         isParametersAnnotationPresent(handlerMethod.method(), ClusterNodeURI.class);
                 if (handlerMethod.method().isAnnotationPresent(Blocking.class) && !needFetchArguments) {
                     invokeHandlerMethodBlocking(ctx, handlerMethod, args);
@@ -578,12 +579,17 @@ public class EasyRouting {
             int i = 0;
             for (Parameter parameter : handlerMethod.method().getParameters()) {
                 ClusterNodeURI annotation = parameter.getAnnotation(ClusterNodeURI.class);
-                if (annotation != null) {
+                ServiceDiscovery serviceDiscovery = getServiceDiscovery();
+                if (annotation != null && serviceDiscovery != null) {
                     int finalI = i;
                     futures.add(serviceDiscovery.getRecord(new JsonObject().put("name", annotation.value())).onComplete((record, ex) -> {
                         if (ex == null && record != null) {
-                            JsonObject location = record.getLocation();
-                            args[finalI] = URI.create(location.getString("endpoint"));
+                            // disallow getting 'this' record to avoid circular processing
+                            Record publishedRecord = getPublishedRecord();
+                            if (! record.getName().equals(publishedRecord != null ? publishedRecord.getName() : null)) {
+                                JsonObject location = record.getLocation();
+                                args[finalI] = URI.create(location.getString("endpoint"));
+                            }
                         } else {
                             logger.error("Failed to get cluster node endpoint for: " + annotation.value(), ex);
                         }
@@ -838,6 +844,9 @@ public class EasyRouting {
 
         @SuppressWarnings("unchecked")
         private void processHandlerResultNotFuture(Method method, RoutingContext ctx, Object result) {
+            if (ctx.response().ended())
+                return;
+
             Result<Object> handlerResult = result instanceof Result<?> ? (Result<Object>) result : new Result<>(result);
             handlerResult.setResultClass(method.getReturnType());
             handlerResult.setAnnotations(method.getAnnotations());
@@ -849,7 +858,7 @@ public class EasyRouting {
                 handlerResult.setResultClass(convertedResult.getClass());
             }
 
-            handlerResult.setTemplateEngine(templateEngine);
+            handlerResult.setTemplateEngine(getTemplateEngine());
             handlerResult.handle(ctx);
         }
 
