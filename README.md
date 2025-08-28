@@ -327,7 +327,10 @@ String get(@PathParam("path") String path, TemplateModel templateModel) {
 
 ### Clustering Support
 
-EasyRouting `Application` includes support of clustering; cluster creation, node registration etc. automatically handled by EasyRouting. Use `Application.clustered(String)` method to run application in clustered mode.
+EasyRouting `Application` includes support of clustering; cluster creation, node registration etc. automatically handled by EasyRouting. 
+Check GitHub for a sample project: https://github.com/gregory-ledenev/EasyRoutingClusterSample
+
+Use `Application.clustered(String)` method to run application in clustered mode.
 
 ```java
 public static void main(String[] args) {
