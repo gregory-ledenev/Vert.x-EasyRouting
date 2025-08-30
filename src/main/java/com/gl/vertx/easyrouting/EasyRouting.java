@@ -64,14 +64,14 @@ import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
  *
- * @version 0.9.14
- * @since 0.9.14
+ * @version 0.9.15
+ * @since 0.9.15
  */
 public class EasyRouting {
     /**
      * Current version of the EasyRouting library.
      */
-    public static final String VERSION = "0.9.14";
+    public static final String VERSION = "0.9.15";
     public static final String REDIRECT = "redirect:";
     private static final Logger logger = LoggerFactory.getLogger(EasyRouting.class);
     private static final String ERROR_HANDLING_ANNOTATED_METHOD = "Error handling annotated method: {0}({1}). Error: {2}";
@@ -449,23 +449,6 @@ public class EasyRouting {
             throw new IllegalArgumentException("Unsupported value type: " + to);
         }
 
-        private static void applyHttpHeaders(Method method, Result<?> handlerResult) {
-            HttpHeaders headers = method.getAnnotation(HttpHeaders.class);
-            if (headers != null) {
-                for (HttpHeader header : headers.value()) {
-                    String[] headerParts = header.value().split(":");
-                    if (headerParts.length == 2)
-                        handlerResult.putHeader(headerParts[0].trim(), headerParts[1].trim());
-                    else
-                        logger.warn("Invalid header definition: " + header.value());
-                }
-            }
-
-            ContentType contentType = method.getAnnotation(ContentType.class);
-            if (contentType != null)
-                handlerResult.putHeader(CONTENT_TYPE, contentType.value());
-        }
-
         private void obtainRpcContext(RoutingContext ctx, Object target) throws RpcContext.RpcException {
             if (annotation != null)
                 return;
@@ -559,7 +542,7 @@ public class EasyRouting {
         private void invokeHandlerMethod(RoutingContext ctx, MethodResult handlerMethod, Object[] args) {
             try {
                 boolean needFetchArguments = getServiceDiscovery() != null &&
-                        isParametersAnnotationPresent(handlerMethod.method(), ClusterNodeURI.class);
+                        isParametersAnnotationPresent(handlerMethod.method(), NodeURI.class);
                 if (handlerMethod.method().isAnnotationPresent(Blocking.class) && !needFetchArguments) {
                     invokeHandlerMethodBlocking(ctx, handlerMethod, args);
                 } else if (needFetchArguments) {
@@ -581,7 +564,7 @@ public class EasyRouting {
             List<Future<Record>> futures = new ArrayList<>();
             int i = 0;
             for (Parameter parameter : handlerMethod.method().getParameters()) {
-                ClusterNodeURI annotation = parameter.getAnnotation(ClusterNodeURI.class);
+                NodeURI annotation = parameter.getAnnotation(NodeURI.class);
                 ServiceDiscovery serviceDiscovery = getServiceDiscovery();
                 if (annotation != null && serviceDiscovery != null) {
                     int finalI = i;
@@ -726,7 +709,7 @@ public class EasyRouting {
                 } else if (parameter.getAnnotation(TemplateModelParam.class) != null || parameter.getType().equals(TemplateModel.class)) {
                     otherParamCount++;
                     paramNames.add(parameter.getName());
-                } else if (parameter.getAnnotation(ClusterNodeURI.class) != null) {
+                } else if (parameter.getAnnotation(NodeURI.class) != null) {
                     otherParamCount++;
                     paramNames.add(parameter.getName());
                 } else {
@@ -787,7 +770,7 @@ public class EasyRouting {
                     result.add(ctx.request().getHeader(parameter.getAnnotation(HeaderParam.class).value()));
                 } else if (parameter.getAnnotation(TemplateModelParam.class) != null || parameter.getType().equals(TemplateModel.class)) {
                     result.add(new TemplateModel(ctx));
-                } else if (parameter.getAnnotation(ClusterNodeURI.class) != null) {
+                } else if (parameter.getAnnotation(NodeURI.class) != null) {
                     result.add(null); // add null as placeholder; we will get actual values later
                 } else if (parameter.getType().equals(RoutingContext.class) || parameter.getAnnotation(ContextParam.class) != null) {
                     result.add(ctx);
@@ -851,9 +834,7 @@ public class EasyRouting {
                 return;
 
             Result<Object> handlerResult = result instanceof Result<?> ? (Result<Object>) result : new Result<>(result);
-            handlerResult.setResultClass(method.getReturnType());
-            handlerResult.setAnnotations(method.getAnnotations());
-            applyHttpHeaders(method, handlerResult);
+            handlerResult.setup(target instanceof EasyRoutingContext ? (EasyRoutingContext) target : null, method);
 
             Object convertedResult = convertTo(target, handlerResult.getResult(), method.getGenericReturnType(), (String) handlerResult.getHeaders().get(CONTENT_TYPE));
             if (handlerResult.getResult() != convertedResult) {
@@ -861,7 +842,6 @@ public class EasyRouting {
                 handlerResult.setResultClass(convertedResult.getClass());
             }
 
-            handlerResult.setTemplateEngine(getTemplateEngine());
             handlerResult.handle(ctx);
         }
 

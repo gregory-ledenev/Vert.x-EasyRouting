@@ -1,7 +1,6 @@
 package com.gl.vertx.easyrouting;
 
 import com.gl.vertx.easyrouting.annotations.*;
-import io.vertx.ext.web.RoutingContext;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -100,9 +99,9 @@ public class UserAdminApplication extends Application {
         return path;
     }
 
-    @ANY("/api/users/*")
-    Result<URI> apiUsers(RoutingContext ctx, @ClusterNodeURI("user-service") URI userServiceURI) {
-        return Result.forwardToNode(ctx, userServiceURI, true);
+    @ANY("/api/users/*") @ForwardToNode(trustAllCerts = true, circuitBreaker = "user-service")
+    public URI apiUsers(@NodeURI("user-service") URI userServiceURI) {
+        return userServiceURI;
     }
 
     @HandlesStatusCode(401)

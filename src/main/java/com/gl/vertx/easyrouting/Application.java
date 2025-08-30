@@ -362,8 +362,7 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, EasyR
         Objects.requireNonNull(controller);
         if (isRunning())
             throw new IllegalStateException("Cannot register controller after application has started");
-        ApplicationModule<?> applicationModule = new ApplicationModule<>(controller, protectedRoutes) {
-        };
+        ApplicationModule<?> applicationModule = new ApplicationModule<>(controller, protectedRoutes) {};
         applicationModule.setApplication(this);
         applicationModules.add(applicationModule);
         return this;

@@ -26,6 +26,7 @@
 
 package com.gl.vertx.easyrouting;
 
+import io.vertx.circuitbreaker.CircuitBreaker;
 import io.vertx.ext.web.common.template.TemplateEngine;
 import io.vertx.servicediscovery.Record;
 import io.vertx.servicediscovery.ServiceDiscovery;
@@ -59,4 +60,12 @@ public interface EasyRoutingContext extends EasyRouting.AnnotatedConvertersHolde
      * @return a {@code Record} instance
      */
     Record getPublishedRecord();
+
+    /**
+     * Retrieves a {@link CircuitBreaker} instance by name.
+     *
+     * @param name the name of the circuit breaker
+     * @return the {@link CircuitBreaker} instance associated with the given name
+     */
+    public CircuitBreaker getCircuitBreaker(String name);
 }

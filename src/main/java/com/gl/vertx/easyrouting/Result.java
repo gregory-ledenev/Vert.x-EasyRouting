@@ -24,13 +24,10 @@ SOFTWARE.
 
 package com.gl.vertx.easyrouting;
 
-import com.gl.vertx.easyrouting.annotations.FileFromFolder;
-import com.gl.vertx.easyrouting.annotations.FileFromResource;
-import com.gl.vertx.easyrouting.annotations.NullResult;
-import com.gl.vertx.easyrouting.annotations.Template;
+import com.gl.vertx.easyrouting.annotations.*;
+import io.vertx.circuitbreaker.CircuitBreaker;
 import io.vertx.core.Future;
 import io.vertx.core.buffer.Buffer;
-import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.MimeMapping;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -47,6 +44,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.net.FileNameMap;
 import java.net.URI;
 import java.net.URLConnection;
@@ -87,6 +85,7 @@ public class Result<T> {
     private TemplateEngine templateEngine;
 
     private boolean trustAllCerts;
+    private EasyRoutingContext easyRoutingContext;
 
     /**
      * Constructs a HandlerResult with a result value and default status code 200.
@@ -165,19 +164,6 @@ public class Result<T> {
         }
     }
 
-    /**
-     * Creates a {@code Result} that will forward current request to a different node (microservice)
-     * @param ctx a {@code RotingContext} instance
-     * @param nodeURI node URI to forward request to
-     * @param isTrustAllCerts specifies if all certificates for SSL connection should be trusted. Set it {@code true}
-     *                        for self-signed certificates
-     * @return a {@code Result} configured for forwarding
-     */
-    public static Result<URI> forwardToNode(RoutingContext ctx, URI nodeURI, boolean isTrustAllCerts) {
-        Result<URI> result = new Result<>(nodeURI.resolve(ctx.request().path() + (ctx.request().query() != null ? "?" + ctx.request().query() : "")));
-        result.setTrustAllCerts(true);
-        return result;
-    }
     /**
      * Creates a HandlerResult that saves uploaded files and performs a redirect.
      *
@@ -433,6 +419,24 @@ public class Result<T> {
         return mimeType;
     }
 
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void handleFutureResponse(RoutingContext ctx, Future future) {
+        future.onComplete((object, ex) -> {
+            if (ex == null) {
+                if (!ctx.response().ended()) {
+                    if (object instanceof Result futureResult)
+                        futureResult.handle(ctx);
+                    else
+                        new Result(object).handle(ctx);
+                }
+            } else {
+                logger.error(ex.getMessage(), ex);
+                if (!ctx.response().ended())
+                    ctx.response().setStatusCode(500).end();
+            }
+        });
+    }
+
     public boolean isProcessTemplate() {
         return templateEngine != null;
     }
@@ -471,7 +475,6 @@ public class Result<T> {
         return result;
     }
 
-
     /**
      * Sets the result value.
      *
@@ -506,6 +509,34 @@ public class Result<T> {
      */
     public void setStatusCode(int statusCode) {
         this.statusCode = statusCode;
+    }
+
+    void setup(EasyRoutingContext context, Method method) {
+        this.easyRoutingContext = context;
+
+        if (context != null)
+            setTemplateEngine(context.getTemplateEngine());
+
+        setResultClass(method.getReturnType());
+        setAnnotations(method.getAnnotations());
+        applyHttpHeaders(method);
+    }
+
+    private void applyHttpHeaders(Method method) {
+        HttpHeaders headers = method.getAnnotation(HttpHeaders.class);
+        if (headers != null) {
+            for (HttpHeader header : headers.value()) {
+                String[] headerParts = header.value().split(":");
+                if (headerParts.length == 2)
+                    putHeader(headerParts[0].trim(), headerParts[1].trim());
+                else
+                    logger.warn("Invalid header definition: " + header.value());
+            }
+        }
+
+        ContentType contentType = method.getAnnotation(ContentType.class);
+        if (contentType != null)
+            putHeader(CONTENT_TYPE, contentType.value());
     }
 
     /**
@@ -588,24 +619,6 @@ public class Result<T> {
             logger.error("Error handling result: ", e);
             ctx.response().setStatusCode(500).end();
         }
-    }
-
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private static void handleFutureResponse(RoutingContext ctx, Future future) {
-        future.onComplete((object, ex) -> {
-            if (ex == null) {
-                if (!ctx.response().ended()) {
-                    if (object instanceof Result futureResult)
-                        futureResult.handle(ctx);
-                    else
-                        new Result(object).handle(ctx);
-                }
-            } else {
-                logger.error(ex.getMessage(), ex);
-                if (!ctx.response().ended())
-                    ctx.response().setStatusCode(500).end();
-            }
-        });
     }
 
     private void handleNullResult(RoutingContext ctx) {
@@ -725,18 +738,42 @@ public class Result<T> {
         trustAllCerts = aTrustAllCerts;
     }
 
-    private void handleUriResult(RoutingContext ctx, URI     uri) {
-        boolean isSsl = uri.getScheme().equalsIgnoreCase("https");
+    @SuppressWarnings("unchecked")
+    private <A extends Annotation> A getAnnotation(Class<A> annotationType) {
+        for (Annotation annotation : annotations) {
+            if (annotation.annotationType().equals(annotationType))
+                return (A) annotation;
+        }
+        return null;
+    }
+
+    private void handleUriResult(RoutingContext ctx, URI uri) {
+        ForwardToNode forwardToNode = getAnnotation(ForwardToNode.class);
+        final URI localUri;
+        final CircuitBreaker circuitBreaker;
+        if (forwardToNode != null) {
+            trustAllCerts = forwardToNode.trustAllCerts();
+            localUri = forwardToNode.copyPathAndQuery() ?
+                    uri.resolve(ctx.request().path() + (ctx.request().query() != null ? "?" + ctx.request().query() : "")) :
+                    uri;
+            circuitBreaker = !forwardToNode.circuitBreaker().isEmpty() && easyRoutingContext != null ?
+                    easyRoutingContext.getCircuitBreaker(forwardToNode.circuitBreaker()) : null;
+        } else {
+            localUri = uri;
+            circuitBreaker = null;
+        }
+
+        boolean isSsl = localUri.getScheme().equalsIgnoreCase("https");
         WebClientOptions options = new WebClientOptions()
                 .setSsl(isSsl)
                 .setTrustAll(this.trustAllCerts)
-                .setVerifyHost(! this.trustAllCerts);
+                .setVerifyHost(!this.trustAllCerts);
         WebClient webClient = WebClient.create(ctx.vertx(), options);
 
         HttpRequest<Buffer> request = webClient.request(ctx.request().method(),
-                uri.getPort(),
-                uri.getHost(),
-                uri.getPath() + (uri.getQuery() != null ? "?" + uri.getQuery() : ""));
+                localUri.getPort(),
+                localUri.getHost(),
+                localUri.getPath() + (localUri.getQuery() != null ? "?" + localUri.getQuery() : ""));
         request.ssl(isSsl);
 
         ctx.request().headers().forEach(header -> {
@@ -745,16 +782,32 @@ public class Result<T> {
             }
         });
 
-        request.sendBuffer(ctx.body().buffer())
-                .onSuccess(response -> {
-                    ctx.response().headers().setAll(response.headers());
-                    ctx.response()
-                            .setStatusCode(response.statusCode())
-                            .end(response.body());
-                })
-                .onFailure(err -> {
-                    System.err.println("Failed to forward request to serviceName: " + err.getMessage());
-                    ctx.response().setStatusCode(500).end("Service unavailable");
-                });
+        if (circuitBreaker != null) {
+            circuitBreaker.execute(promise -> {
+                        request.sendBuffer(ctx.body().buffer())
+                                .onSuccess(response -> {
+                                    ctx.response().headers().setAll(response.headers());
+                                    ctx.response().setStatusCode(response.statusCode()).end(response.body());
+                                    promise.complete();
+                                })
+                                .onFailure(err -> {
+                                    logger.error("Failed to forward request to node: " + localUri, err);
+                                    ctx.response().setStatusCode(500).end("Service unavailable");
+                                    promise.fail(err);
+                                });
+                    })
+                    .otherwise(err -> "Failed to forward request to node: " + localUri + ". " + err.getMessage());
+
+        } else {
+            request.sendBuffer(ctx.body().buffer())
+                    .onSuccess(response -> {
+                        ctx.response().headers().setAll(response.headers());
+                        ctx.response().setStatusCode(response.statusCode()).end(response.body());
+                    })
+                    .onFailure(err -> {
+                        logger.error("Failed to forward request to node: " + localUri, err);
+                        ctx.response().setStatusCode(500).end("Service unavailable");
+                    });
+        }
     }
 }

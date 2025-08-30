@@ -59,7 +59,7 @@ To add EasyRouting to your build system, you can use the following Maven depende
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.14</version>
+    <version>0.9.15</version>
 </dependency>
 ```
 To add JavaDoc:
@@ -67,7 +67,7 @@ To add JavaDoc:
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.14</version>
+    <version>0.9.15</version>
     <classifier>javadoc</classifier>
 </dependency>
 ```
@@ -339,12 +339,12 @@ public static void main(String[] args) {
             .start();
 }
 ```
-Need another service? Just add `@ClusterNodeURI` to a method parameter - EasyRouting injects the right URI for you. You 
+Need another service? Just add `@NodeURI` to a method parameter - EasyRouting injects the right URI for you. You 
 may use Vert.x `WebClient` to make asynchronous use of other services. Or you may annotate a method with `@Blocking` and use
 standard synchronous `HttpClient`, supplied by Java, to make synchronous implementation for prototyping and quick entry.
 ```java
 @GET("/hello")
-public String hello(@ClusterNodeURI("node1") URI uri1, @ClusterNodeURI("node2") URI uri2) {
+public String hello(@NodeURI("node1") URI uri1, @NodeURI("node2") URI uri2) {
     // add here your code that calls microservices
     return "Hello Clustering and Microservices";
 }
@@ -352,9 +352,9 @@ public String hello(@ClusterNodeURI("node1") URI uri1, @ClusterNodeURI("node2") 
 
 Want to build a service gateway? Catch all requests to a service and forward it to a node/microservice:
 ```java
-@ANY("/api/users/*")
-Result<URI> apiUsers(RoutingContext ctx, @ClusterNodeURI("user-service") URI userServiceURI) {
-    return Result.forwardToNode(ctx, userServiceURI, true);
+@ANY("/api/users/*") @ForwardToNode(circuitBreaker = "user-service")
+public URI apiUsers(@NodeURI("user-service") URI userServiceURI) {
+    return userServiceURI;
 }
 ```
 
@@ -418,8 +418,7 @@ Handler methods can return:
 - Usual Java objects or primitives if the code in handler methods is synchronous.
 - `Future` to allow retrieving asynchronous results.
 - `Result` instance if you need more control and want to provide status code and headers.
-- `URI` if you want to forward a request to a different node/microservice. You can use `Result.forwardToNode()` utility 
-method to compose such a URI.
+- `URI` if you want to forward a request to a different node/microservice. Use `@ForwardToNode` annotation to get more control and to automatically copy path and query from the original request.
 
 Use `@Blocking` annotation to mark methods that should be executed as blocking
 operations.

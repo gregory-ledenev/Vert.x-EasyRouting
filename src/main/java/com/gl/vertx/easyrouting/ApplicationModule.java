@@ -26,6 +26,7 @@
 
 package com.gl.vertx.easyrouting;
 
+import io.vertx.circuitbreaker.CircuitBreaker;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.common.template.TemplateEngine;
 import io.vertx.servicediscovery.Record;
@@ -153,5 +154,10 @@ public abstract class ApplicationModule<T extends Application>
      */
     public Object getController() {
         return controller;
+    }
+
+    @Override
+    public CircuitBreaker getCircuitBreaker(String name) {
+        return application.getCircuitBreaker(name);
     }
 }

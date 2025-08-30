@@ -32,14 +32,24 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Annotation used to bind a handler method parameter to an {@code URI} of a cluster node endpoint
+ * Annotation to indicate that a method should forward requests to a specific node. If {@code copyPathAndQuery} field is
+ * not specified - path and query will be copied from the original request.
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.PARAMETER)
-public @interface ClusterNodeURI {
+@Target(ElementType.METHOD)
+public @interface ForwardToNode {
     /**
-     * Name of a cluster node to return endpoint for
-     * @return name of a cluster node
+     * Specifies whether to trust all SSL certificates when forwarding; set it {@code true} for self-signed certs.
      */
-    String value();
+    boolean trustAllCerts() default false;
+
+    /**
+     * Specifies the name of the circuit breaker to use for this forwarding; no circuit breaker if omitted
+     */
+    String circuitBreaker() default "";
+
+    /**
+     * Specifies that path and query should be copied from the original request; it is {@code true} by default
+     */
+    boolean copyPathAndQuery() default true;
 }
