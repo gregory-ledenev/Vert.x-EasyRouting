@@ -64,14 +64,14 @@ import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
  *
- * @version 0.9.13
- * @since 0.9.13
+ * @version 0.9.14
+ * @since 0.9.14
  */
 public class EasyRouting {
     /**
      * Current version of the EasyRouting library.
      */
-    public static final String VERSION = "0.9.12";
+    public static final String VERSION = "0.9.14";
     public static final String REDIRECT = "redirect:";
     private static final Logger logger = LoggerFactory.getLogger(EasyRouting.class);
     private static final String ERROR_HANDLING_ANNOTATED_METHOD = "Error handling annotated method: {0}({1}). Error: {2}";
@@ -100,6 +100,7 @@ public class EasyRouting {
                                        ServiceDiscovery serviceDiscovery) {
         Objects.requireNonNull(router);
         Objects.requireNonNull(target);
+        setupController(router, ANY.class, target);
         setupController(router, GET.class, target);
         setupController(router, POST.class, target);
         setupController(router, DELETE.class, target);
@@ -301,6 +302,8 @@ public class EasyRouting {
                             router.put(path).handler(createHandler(annotation, target));
                         else if (annotationClass == PATCH.class)
                             router.patch(path).handler(createHandler(annotation, target));
+                        else if (annotationClass == ANY.class)
+                            router.route(path).handler(createHandler(annotation, target));
                     }
                 }
             }
@@ -786,7 +789,7 @@ public class EasyRouting {
                     result.add(new TemplateModel(ctx));
                 } else if (parameter.getAnnotation(ClusterNodeURI.class) != null) {
                     result.add(null); // add null as placeholder; we will get actual values later
-                } else if (parameter.getType().equals(RoutingContext.class) && parameter.getAnnotation(ContextParam.class) != null) {
+                } else if (parameter.getType().equals(RoutingContext.class) || parameter.getAnnotation(ContextParam.class) != null) {
                     result.add(ctx);
                 } else {
                     Param param = parameter.getAnnotation(Param.class);

@@ -1,7 +1,9 @@
 package com.gl.vertx.easyrouting;
 
 import com.gl.vertx.easyrouting.annotations.*;
+import io.vertx.ext.web.RoutingContext;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,53 +33,58 @@ import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 @SuppressWarnings("unused")
 
 public class UserAdminApplication extends Application {
-    static class UserApplicationModule extends ApplicationModule<UserAdminApplication> {
+    static class UserServiceApplication extends Application {
         @GET("/api/users")
         List<User> getUsers() {
-            return application.userService.getUsers();
+            return userService.getUsers();
         }
 
         @GET("/api/users/:id") @NullResult(value = "No user found", statusCode = 404)
         User getUser(@Param("id") String id) {
-            return application.userService.getUser(id);
+            return userService.getUser(id);
         }
 
         @POST(value = "/api/users", requiredRoles = {"admin"})
         User addUser(@BodyParam("user") User user) {
-            return application.userService.addUser(user);
+            return userService.addUser(user);
         }
 
         @PUT(value = "/api/users/:id", requiredRoles = {"admin"})
         User updateUser(@Param("id") String id, @BodyParam("user") User user) {
-            return application.userService.updateUser(user, id);
+            return userService.updateUser(user, id);
         }
 
         @DELETE(value = "/api/users/:id", requiredRoles = {"admin"})
         boolean deleteUser(@Param("id") String id) {
-            return application.userService.deleteUser(id);
+            return userService.deleteUser(id);
         }
 
-        public UserApplicationModule(String... protectedRoutes) {
-            super(protectedRoutes);
+        public static void main(String[] args) {
+            UserServiceApplication app = new UserServiceApplication().
+                    jwtAuth(JWT_SECRET, "/api/*").
+                    sslWithJks("keystore", "1234567890").
+                    handleShutdown().
+                    clustered("user-service").
+                    start(8444);
         }
+
+        private final UserService userService = new UserService();
     }
 
     private final LoginService loginService;
-    private final UserService userService;
     static final String JWT_SECRET = "very looooooooooooooooooooooooooooooooooooong secret";
 
     public static void main(String[] args) {
-        UserAdminApplication userAdminApplication = new UserAdminApplication(new LoginService(), new UserService()).
-                module(new UserApplicationModule("/api/*")).
+        UserAdminApplication userAdminApplication = new UserAdminApplication(new LoginService()).
                 templateEngine(TemplateEngineFactory.Type.Thymeleaf).
                 jwtAuth(JWT_SECRET).
                 sslWithJks("keystore", "1234567890").
                 handleShutdown().
+                clustered("main").
                 start();
     }
 
-    UserAdminApplication(LoginService loginService, UserService userService) {
-        this.userService = userService;
+    UserAdminApplication(LoginService loginService) {
         this.loginService = loginService;
     }
 
@@ -91,6 +98,11 @@ public class UserAdminApplication extends Application {
     String get(@PathParam("path") String path, TemplateModel templateModel) {
         templateModel.put("title", "SOME CUSTOM TITLE");
         return path;
+    }
+
+    @ANY("/api/users/*")
+    Result<URI> apiUsers(RoutingContext ctx, @ClusterNodeURI("user-service") URI userServiceURI) {
+        return Result.forwardToNode(ctx, userServiceURI, true);
     }
 
     @HandlesStatusCode(401)

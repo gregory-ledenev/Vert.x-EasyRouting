@@ -118,6 +118,22 @@ public class HttpMethods {
     }
 
     /**
+     * Marks a method as handling any requests.
+     */
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.METHOD)
+    public @interface ANY {
+        /**
+         * @return the path pattern for this endpoint
+         */
+        String value();
+        /**
+         * @return the roles required to access this endpoint
+         */
+        String[] requiredRoles() default {};
+    }
+
+    /**
      * Retrieves the roles required to access a specific endpoint based on its annotation.
      * Supported annotations include HTTP methods such as GET, POST, PUT, DELETE, and PATCH.
      *
@@ -130,6 +146,7 @@ public class HttpMethods {
         if (annotation instanceof HttpMethods.PUT put) return put.requiredRoles();
         if (annotation instanceof HttpMethods.DELETE delete) return delete.requiredRoles();
         if (annotation instanceof HttpMethods.PATCH patch) return patch.requiredRoles();
+        if (annotation instanceof HttpMethods.ANY any) return any.requiredRoles();
         return null;
     }
 
@@ -146,6 +163,7 @@ public class HttpMethods {
         if (annotation instanceof HttpMethods.PUT put) return put.value();
         if (annotation instanceof HttpMethods.DELETE delete) return delete.value();
         if (annotation instanceof HttpMethods.PATCH patch) return patch.value();
+        if (annotation instanceof HttpMethods.ANY any) return any.value();
         return null;
     }
 

@@ -59,7 +59,7 @@ To add EasyRouting to your build system, you can use the following Maven depende
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.13</version>
+    <version>0.9.14</version>
 </dependency>
 ```
 To add JavaDoc:
@@ -67,7 +67,7 @@ To add JavaDoc:
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.13</version>
+    <version>0.9.14</version>
     <classifier>javadoc</classifier>
 </dependency>
 ```
@@ -349,6 +349,15 @@ public String hello(@ClusterNodeURI("node1") URI uri1, @ClusterNodeURI("node2") 
     return "Hello Clustering and Microservices";
 }
 ```
+
+Want to build a service gateway? Catch all requests to a service and forward it to a node/microservice:
+```java
+@ANY("/api/users/*")
+Result<URI> apiUsers(RoutingContext ctx, @ClusterNodeURI("user-service") URI userServiceURI) {
+    return Result.forwardToNode(ctx, userServiceURI, true);
+}
+```
+
 Application provides cached instances of `CircuitBreaker` that can be used to guard calls to other services. Use `getCircuitBreaker()` to get a `CircuitBreaker` for a node. You may specify the configuration for all managed `CircuitBreaker`'s using the `circuitBreaker()` method.
 
 ## Using With Vert.x Router
@@ -405,7 +414,14 @@ method annotations:
 - `@DELETE(path)` - For HTTP DELETE requests
 - `@PATCH(path)` - For HTTP PATCH requests
 
-If the code in handler methods is synchronous — obtain results and return them. Otherwise - prepare and return `Future`s to allow retrieving asynchronous results. Use `@Blocking` annotation to mark methods that should be executed as blocking
+Handler methods can return:
+- Usual Java objects or primitives if the code in handler methods is synchronous.
+- `Future` to allow retrieving asynchronous results.
+- `Result` instance if you need more control and want to provide status code and headers.
+- `URI` if you want to forward a request to a different node/microservice. You can use `Result.forwardToNode()` utility 
+method to compose such a URI.
+
+Use `@Blocking` annotation to mark methods that should be executed as blocking
 operations.
 
 ### Annotating Methods

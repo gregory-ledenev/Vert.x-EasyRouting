@@ -28,12 +28,17 @@ import com.gl.vertx.easyrouting.annotations.FileFromFolder;
 import com.gl.vertx.easyrouting.annotations.FileFromResource;
 import com.gl.vertx.easyrouting.annotations.NullResult;
 import com.gl.vertx.easyrouting.annotations.Template;
+import io.vertx.core.Future;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.MimeMapping;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.FileUpload;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.client.HttpRequest;
+import io.vertx.ext.web.client.WebClient;
+import io.vertx.ext.web.client.WebClientOptions;
 import io.vertx.ext.web.common.template.TemplateEngine;
 import io.vertx.ext.web.handler.HttpException;
 import org.slf4j.Logger;
@@ -43,6 +48,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.net.FileNameMap;
+import java.net.URI;
 import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -79,6 +85,8 @@ public class Result<T> {
     private BiConsumer<Result<T>, RoutingContext> handler;
 
     private TemplateEngine templateEngine;
+
+    private boolean trustAllCerts;
 
     /**
      * Constructs a HandlerResult with a result value and default status code 200.
@@ -157,6 +165,19 @@ public class Result<T> {
         }
     }
 
+    /**
+     * Creates a {@code Result} that will forward current request to a different node (microservice)
+     * @param ctx a {@code RotingContext} instance
+     * @param nodeURI node URI to forward request to
+     * @param isTrustAllCerts specifies if all certificates for SSL connection should be trusted. Set it {@code true}
+     *                        for self-signed certificates
+     * @return a {@code Result} configured for forwarding
+     */
+    public static Result<URI> forwardToNode(RoutingContext ctx, URI nodeURI, boolean isTrustAllCerts) {
+        Result<URI> result = new Result<>(nodeURI.resolve(ctx.request().path() + (ctx.request().query() != null ? "?" + ctx.request().query() : "")));
+        result.setTrustAllCerts(true);
+        return result;
+    }
     /**
      * Creates a HandlerResult that saves uploaded files and performs a redirect.
      *
@@ -497,7 +518,7 @@ public class Result<T> {
         this.headers.put(key, value);
     }
 
-    protected final void handle(RoutingContext ctx) {
+    protected void handle(RoutingContext ctx) {
         if (handler != null) {
             handler.accept(this, ctx);
             if (!ctx.response().ended())
@@ -518,6 +539,7 @@ public class Result<T> {
      * @param ctx The Vert.x routing context to handle the response
      * @throws HttpException if there's an error during response processing
      */
+    @SuppressWarnings({"rawtypes"})
     public void defaultHandle(RoutingContext ctx) {
         try {
             headers.forEach(ctx.response()::putHeader);
@@ -526,7 +548,11 @@ public class Result<T> {
             if (rpcContext != null) {
                 rpcContext.getRpcResponse(result).handle(ctx);
             } else {
-                if (result instanceof Path filePath) {
+                if (result instanceof Future future) {
+                    handleFutureResponse(ctx, future);
+                } else if (result instanceof URI uri) {
+                    handleUriResult(ctx, uri);
+                } else if (result instanceof Path filePath) {
                     ctx.response().putHeader(CONTENT_TYPE, CT_APPLICATION_OCTET_STREAM);
                     ctx.response().putHeader(CONTENT_DISPOSITION, MessageFormat.format("attachment; filename=\"{0}\"", filePath.getFileName().toString()));
                     ctx.response().sendFile(filePath.toString())
@@ -562,6 +588,24 @@ public class Result<T> {
             logger.error("Error handling result: ", e);
             ctx.response().setStatusCode(500).end();
         }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void handleFutureResponse(RoutingContext ctx, Future future) {
+        future.onComplete((object, ex) -> {
+            if (ex == null) {
+                if (!ctx.response().ended()) {
+                    if (object instanceof Result futureResult)
+                        futureResult.handle(ctx);
+                    else
+                        new Result(object).handle(ctx);
+                }
+            } else {
+                logger.error(ex.getMessage(), ex);
+                if (!ctx.response().ended())
+                    ctx.response().setStatusCode(500).end();
+            }
+        });
     }
 
     private void handleNullResult(RoutingContext ctx) {
@@ -671,5 +715,46 @@ public class Result<T> {
 
     void setResultClass(Class<?> resultClass) {
         this.resultClass = resultClass;
+    }
+
+    public boolean isTrustAllCerts() {
+        return trustAllCerts;
+    }
+
+    public void setTrustAllCerts(boolean aTrustAllCerts) {
+        trustAllCerts = aTrustAllCerts;
+    }
+
+    private void handleUriResult(RoutingContext ctx, URI     uri) {
+        boolean isSsl = uri.getScheme().equalsIgnoreCase("https");
+        WebClientOptions options = new WebClientOptions()
+                .setSsl(isSsl)
+                .setTrustAll(this.trustAllCerts)
+                .setVerifyHost(! this.trustAllCerts);
+        WebClient webClient = WebClient.create(ctx.vertx(), options);
+
+        HttpRequest<Buffer> request = webClient.request(ctx.request().method(),
+                uri.getPort(),
+                uri.getHost(),
+                uri.getPath() + (uri.getQuery() != null ? "?" + uri.getQuery() : ""));
+        request.ssl(isSsl);
+
+        ctx.request().headers().forEach(header -> {
+            if (!header.getKey().equalsIgnoreCase("host")) {
+                request.putHeader(header.getKey(), header.getValue());
+            }
+        });
+
+        request.sendBuffer(ctx.body().buffer())
+                .onSuccess(response -> {
+                    ctx.response().headers().setAll(response.headers());
+                    ctx.response()
+                            .setStatusCode(response.statusCode())
+                            .end(response.body());
+                })
+                .onFailure(err -> {
+                    System.err.println("Failed to forward request to serviceName: " + err.getMessage());
+                    ctx.response().setStatusCode(500).end("Service unavailable");
+                });
     }
 }

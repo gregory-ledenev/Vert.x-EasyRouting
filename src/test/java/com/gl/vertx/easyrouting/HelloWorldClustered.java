@@ -30,6 +30,7 @@ import com.gl.vertx.easyrouting.annotations.Blocking;
 import com.gl.vertx.easyrouting.annotations.ClusterNodeURI;
 import io.vertx.circuitbreaker.CircuitBreaker;
 import io.vertx.core.Future;
+import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.client.WebClient;
 
 import java.net.URI;
@@ -45,7 +46,7 @@ import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 public class HelloWorldClustered extends Application {
     @Blocking
     @GET("/blocking")
-    public String helloBlocking(@ClusterNodeURI("node1") URI node1,
+    public String helloBlocking(RoutingContext ctx, @ClusterNodeURI("node1") URI node1,
                                 @ClusterNodeURI("node2") URI node2,
                                 @ClusterNodeURI("mainNode") URI mainNode) {
         if (! nodeName.equals("mainNode"))
@@ -76,7 +77,8 @@ public class HelloWorldClustered extends Application {
     }
 
     @GET("/")
-    public Future<String> hello(@ClusterNodeURI("node1") URI node1,
+    public Future<String> hello(RoutingContext ctx,
+                                @ClusterNodeURI("node1") URI node1,
                                 @ClusterNodeURI("node2") URI node2) {
         if (!nodeName.equals("mainNode")) {
             return Future.succeededFuture("Hello from node: " + nodeName);

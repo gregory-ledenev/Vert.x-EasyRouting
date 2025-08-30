@@ -286,7 +286,7 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, EasyR
     }
 
     private void publishService(ServiceDiscovery discovery, String name) {
-        Record record = HttpEndpoint.createRecord(name, host, port, "/");
+        Record record = HttpEndpoint.createRecord(name, isSsl(), host, port, "/", null);
         discovery.publish(record).onComplete((aRecord, ex) -> {
             if (ex== null) {
                 this.publishedRecord = aRecord;
@@ -582,6 +582,14 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, EasyR
         });
         inputThread.setDaemon(true);
         inputThread.start();
+    }
+
+    /**
+     * Checks if the {@code Application} runs in SSL mode
+     * @return {@code true} if the {@code Application} runs in SSL mode; {@code false} otherwise
+     */
+    public boolean isSsl() {
+        return jksOptions != null || pemKeyCertOptions != null;
     }
 
     private void createHttpServer(Promise<Void> startPromise, Router router, int port) {
