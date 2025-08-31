@@ -673,13 +673,8 @@ public class Result<T> {
         } else {
 
             if (annotations != null) {
-                Template templateAnnotation = null;
-                for (Annotation annotation : annotations) {
-                    if (annotation instanceof Template) {
-                        templateAnnotation = (Template) annotation;
-                        break;
-                    }
-                }
+                Template templateAnnotation = getAnnotation(Template.class);
+
                 for (Annotation annotation : annotations) {
                     if (annotation instanceof FileFromResource fileFromResource) {
                         Result.fileFromResource(fileFromResource.value(), string).handle(ctx);
@@ -753,8 +748,11 @@ public class Result<T> {
         final CircuitBreaker circuitBreaker;
         if (forwardToNode != null) {
             trustAllCerts = forwardToNode.trustAllCerts();
+            String path = ctx.request().path();
+            if (! forwardToNode.shortenPathBy().isEmpty() && path.startsWith(forwardToNode.shortenPathBy()))
+                path = path.substring(forwardToNode.shortenPathBy().length());
             localUri = forwardToNode.copyPathAndQuery() ?
-                    uri.resolve(ctx.request().path() + (ctx.request().query() != null ? "?" + ctx.request().query() : "")) :
+                    uri.resolve(path + (ctx.request().query() != null ? "?" + ctx.request().query() : "")) :
                     uri;
             circuitBreaker = !forwardToNode.circuitBreaker().isEmpty() && easyRoutingContext != null ?
                     easyRoutingContext.getCircuitBreaker(forwardToNode.circuitBreaker()) : null;

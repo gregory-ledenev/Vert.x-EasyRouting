@@ -413,6 +413,7 @@ method annotations:
 - `@PUT(path)` - For HTTP PUT requests
 - `@DELETE(path)` - For HTTP DELETE requests
 - `@PATCH(path)` - For HTTP PATCH requests
+- `@ANY(path)` - For any HTTP requests
 
 Handler methods can return:
 - Usual Java objects or primitives if the code in handler methods is synchronous.
@@ -425,13 +426,12 @@ operations.
 
 ### Annotating Methods
 
-#### @GET, @POST, @PUT, @DELETE, @PATCH
+#### @GET, @POST, @PUT, @DELETE, @PATCH, @ANY
 
 Use `@GET`, `@POST`, `@PUT`, `@DELETE`, or `@PATCH` annotations to define
-handler methods for specific HTTP methods. The `value` parameter specifies the
-URL path for the handler. You may use the optional `requiredRoles` parameter
-to specify required roles for the method, which will be checked during JWT
-authentication. If nor roles are specified, the method will be accessible to all
+handler methods for specific HTTP methods. Use `@ANY` to define handler methods that handle any types of HTTP methods. The `value` parameter specifies the URL path for the handler. You may use the
+optional `requiredRoles` parameter to specify required roles for the method, which will be checked 
+during JWT authentication. If nor roles are specified, the method will be accessible to all 
 authenticated users.
 
 ```java

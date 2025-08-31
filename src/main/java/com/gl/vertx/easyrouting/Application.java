@@ -661,7 +661,7 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, EasyR
             for (ApplicationModule<?> applicationModule : applicationModules)
                 applicationModule.setupController(router);
 
-            EasyRouting.setupController(router, Application.this, getTemplateEngine(), getServiceDiscovery());
+            EasyRouting.setupController(router, Application.this);
             new RpcController(Application.this).setupController(router);
 
             createHttpServer(startPromise, router, port);

@@ -33,27 +33,27 @@ import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
 
 public class UserAdminApplication extends Application {
     static class UserServiceApplication extends Application {
-        @GET("/api/users")
+        @GET("/")
         List<User> getUsers() {
             return userService.getUsers();
         }
 
-        @GET("/api/users/:id") @NullResult(value = "No user found", statusCode = 404)
+        @GET("/:id") @NullResult(value = "No user found", statusCode = 404)
         User getUser(@Param("id") String id) {
             return userService.getUser(id);
         }
 
-        @POST(value = "/api/users", requiredRoles = {"admin"})
+        @POST(value = "/", requiredRoles = {"admin"})
         User addUser(@BodyParam("user") User user) {
             return userService.addUser(user);
         }
 
-        @PUT(value = "/api/users/:id", requiredRoles = {"admin"})
+        @PUT(value = "/:id", requiredRoles = {"admin"})
         User updateUser(@Param("id") String id, @BodyParam("user") User user) {
             return userService.updateUser(user, id);
         }
 
-        @DELETE(value = "/api/users/:id", requiredRoles = {"admin"})
+        @DELETE(value = "/:id", requiredRoles = {"admin"})
         boolean deleteUser(@Param("id") String id) {
             return userService.deleteUser(id);
         }
@@ -99,7 +99,7 @@ public class UserAdminApplication extends Application {
         return path;
     }
 
-    @ANY("/api/users/*") @ForwardToNode(trustAllCerts = true, circuitBreaker = "user-service")
+    @ANY("/api/users/*") @ForwardToNode(trustAllCerts = true, circuitBreaker = "user-service", shortenPathBy = "/api/users")
     public URI apiUsers(@NodeURI("user-service") URI userServiceURI) {
         return userServiceURI;
     }

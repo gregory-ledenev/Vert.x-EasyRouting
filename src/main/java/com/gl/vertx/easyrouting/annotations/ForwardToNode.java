@@ -52,4 +52,10 @@ public @interface ForwardToNode {
      * Specifies that path and query should be copied from the original request; it is {@code true} by default
      */
     boolean copyPathAndQuery() default true;
+
+    /**
+     * Specifies that path should be shortened by removing a specified part from the start. Applicable only if
+     * {@code copyPathAndQuery = true}
+     */
+    String shortenPathBy() default "";
 }

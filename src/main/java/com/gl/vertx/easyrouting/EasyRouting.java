@@ -78,26 +78,13 @@ public class EasyRouting {
     private static final String KEY_RPC_REQUEST = "rpcRequest";
 
     /**
-     * Sets up HTTP request handlers for all supported HTTP methods (GET, POST, DELETE, PUT, PATCH) based on annotated
+     * Sets up HTTP request handlers for all supported HTTP methods (GET, POST, DELETE, PUT, PATCH, ANY) based on annotated
      * methods in the target object.
      *
      * @param router the Vert.x Router instance to configure
      * @param target the object containing annotated handler methods
      */
     public static void setupController(Router router, Object target) {
-        setupController(router, target, null, null);
-    }
-
-    /**
-     * Sets up HTTP request handlers for all supported HTTP methods (GET, POST, DELETE, PUT, PATCH) based on annotated
-     * methods in the target object.
-     *
-     * @param router the Vert.x Router instance to configure
-     * @param target the object containing annotated handler methods
-     */
-    public static void setupController(Router router, Object target,
-                                       TemplateEngine templateEngine,
-                                       ServiceDiscovery serviceDiscovery) {
         Objects.requireNonNull(router);
         Objects.requireNonNull(target);
         setupController(router, ANY.class, target);
