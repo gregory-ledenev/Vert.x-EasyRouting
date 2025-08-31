@@ -50,10 +50,11 @@ public class RpcController {
      *
      * @param target the target object that contains the RPC methods to be handled. Use {@code @Rpc} annotation
      *               on the target object to specify the path for the controller.
+     *
      */
-    public RpcController(Object target) {
+    public RpcController(Object target, EasyRoutingContext easyRoutingContext) {
         this.target = target;
-        routingContextHandler = new EasyRouting.RoutingContextHandler(null, target);
+        routingContextHandler = new EasyRouting.RoutingContextHandler(null, target, easyRoutingContext);
     }
 
     /**

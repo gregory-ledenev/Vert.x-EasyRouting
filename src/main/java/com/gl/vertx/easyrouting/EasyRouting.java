@@ -78,21 +78,36 @@ public class EasyRouting {
     private static final String KEY_RPC_REQUEST = "rpcRequest";
 
     /**
-     * Sets up HTTP request handlers for all supported HTTP methods (GET, POST, DELETE, PUT, PATCH, ANY) based on annotated
-     * methods in the target object.
+     * Sets up HTTP request handlers for all supported HTTP methods (GET, POST, DELETE, PUT, PATCH, ANY) based on
+     * annotated methods in the target object.
      *
      * @param router the Vert.x Router instance to configure
      * @param target the object containing annotated handler methods
      */
     public static void setupController(Router router, Object target) {
+        setupController(router, target, null);
+    }
+
+    /**
+     * Sets up HTTP request handlers for all supported HTTP methods (GET, POST, DELETE, PUT, PATCH, ANY) based on annotated
+     * methods in the target object.
+     *
+     * @param router the Vert.x Router instance to configure
+     * @param target the object containing annotated handler methods
+     * @param easyRoutingContext context
+     */
+    public static void setupController(Router router, Object target, EasyRoutingContext easyRoutingContext) {
         Objects.requireNonNull(router);
         Objects.requireNonNull(target);
-        setupController(router, ANY.class, target);
-        setupController(router, GET.class, target);
-        setupController(router, POST.class, target);
-        setupController(router, DELETE.class, target);
-        setupController(router, PUT.class, target);
-        setupController(router, PATCH.class, target);
+        if (easyRoutingContext == null && ! (target instanceof EasyRoutingContext))
+            throw new IllegalArgumentException("Either target should implement EasyRoutingContext or context must be explicitly specified");
+
+        setupController(router, ANY.class, target, easyRoutingContext);
+        setupController(router, GET.class, target, easyRoutingContext);
+        setupController(router, POST.class, target, easyRoutingContext);
+        setupController(router, DELETE.class, target, easyRoutingContext);
+        setupController(router, PUT.class, target, easyRoutingContext);
+        setupController(router, PATCH.class, target, easyRoutingContext);
 
         setupFailureHandler(router, target);
 
@@ -249,10 +264,10 @@ public class EasyRouting {
         return count;
     }
 
-    private static void setupRpcRequestsHandler(Router router, Object target) {
+    private static void setupRpcRequestsHandler(Router router, Object target, EasyRoutingContext easyRoutingContext) {
         Rpc rpc = target.getClass().getAnnotation(Rpc.class);
         if (rpc != null) {
-            router.post(rpc.path()).handler(createHandler(rpc, target));
+            router.post(rpc.path()).handler(createHandler(rpc, target, easyRoutingContext));
         }
     }
 
@@ -262,8 +277,10 @@ public class EasyRouting {
      * @param router          the Vert.x Router instance to configure
      * @param annotationClass the HTTP method annotation class to process
      * @param target          the object containing annotated handler methods
+     * @param easyRoutingContext context
      */
-    private static void setupController(Router router, Class<? extends Annotation> annotationClass, Object target) {
+    private static void setupController(Router router, Class<? extends Annotation> annotationClass, Object target,
+                                        EasyRoutingContext easyRoutingContext) {
         Set<String> installedHandlers = new HashSet<>();
 
         try {
@@ -280,17 +297,17 @@ public class EasyRouting {
                         installedHandlers.add(installedHandlerKey);
 
                         if (annotationClass == GET.class)
-                            router.get(path).handler(createHandler(annotation, target));
+                            router.get(path).handler(createHandler(annotation, target, easyRoutingContext));
                         else if (annotationClass == POST.class)
-                            router.post(path).handler(createHandler(annotation, target));
+                            router.post(path).handler(createHandler(annotation, target, easyRoutingContext));
                         else if (annotationClass == DELETE.class)
-                            router.delete(path).handler(createHandler(annotation, target));
+                            router.delete(path).handler(createHandler(annotation, target, easyRoutingContext));
                         else if (annotationClass == PUT.class)
-                            router.put(path).handler(createHandler(annotation, target));
+                            router.put(path).handler(createHandler(annotation, target, easyRoutingContext));
                         else if (annotationClass == PATCH.class)
-                            router.patch(path).handler(createHandler(annotation, target));
+                            router.patch(path).handler(createHandler(annotation, target, easyRoutingContext));
                         else if (annotationClass == ANY.class)
-                            router.route(path).handler(createHandler(annotation, target));
+                            router.route(path).handler(createHandler(annotation, target, easyRoutingContext));
                     }
                 }
             }
@@ -316,8 +333,8 @@ public class EasyRouting {
         return result;
     }
 
-    private static Handler<RoutingContext> createHandler(Annotation annotation, Object target) {
-        return new RoutingContextHandler(annotation, target);
+    private static Handler<RoutingContext> createHandler(Annotation annotation, Object target, EasyRoutingContext easyRoutingContext) {
+        return new RoutingContextHandler(annotation, target, easyRoutingContext);
     }
 
     /**
@@ -338,23 +355,32 @@ public class EasyRouting {
         private final Annotation annotation;
         private final Object target;
         private final AnnotatedConverters annotatedConverters;
+        private  final EasyRoutingContext easyRoutingContext;
 
-        public RoutingContextHandler(Annotation annotation, Object target) {
+        public RoutingContextHandler(Annotation annotation, Object target, EasyRoutingContext easyRoutingContext) {
             this.annotation = annotation;
             this.target = target;
             this.annotatedConverters = setupAnnotatedConverters(target);
+            this.easyRoutingContext = easyRoutingContext;
+        }
+
+        private EasyRoutingContext getEasyRoutingContext() {
+            return target instanceof EasyRoutingContext context ? context : this.easyRoutingContext;
         }
 
         private TemplateEngine getTemplateEngine() {
-            return target instanceof EasyRoutingContext easyRoutingContext ? easyRoutingContext.getTemplateEngine() : null;
+            EasyRoutingContext context = getEasyRoutingContext();
+            return context != null ? context.getTemplateEngine() : null;
         }
 
         private ServiceDiscovery getServiceDiscovery() {
-            return target instanceof EasyRoutingContext easyRoutingContext ? easyRoutingContext.getServiceDiscovery() : null;
+            EasyRoutingContext context = getEasyRoutingContext();
+            return context != null ? context.getServiceDiscovery() : null;
         }
 
         private Record getPublishedRecord() {
-            return target instanceof EasyRoutingContext easyRoutingContext ? easyRoutingContext.getPublishedRecord() : null;
+            EasyRoutingContext context = getEasyRoutingContext();
+            return context != null ? context.getPublishedRecord() : null;
         }
 
         private static void errorHandlerInvocation(Annotation annotation, Set<String> parameterNames, Throwable exception) {

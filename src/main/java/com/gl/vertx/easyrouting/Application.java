@@ -28,7 +28,6 @@ import io.vertx.circuitbreaker.CircuitBreaker;
 import io.vertx.circuitbreaker.CircuitBreakerOptions;
 import io.vertx.core.*;
 import io.vertx.core.http.*;
-import io.vertx.core.json.JsonObject;
 import io.vertx.core.net.JksOptions;
 import io.vertx.core.net.PemKeyCertOptions;
 import io.vertx.ext.web.Router;
@@ -40,9 +39,6 @@ import io.vertx.servicediscovery.types.HttpEndpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.URI;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -661,8 +657,8 @@ public class Application implements EasyRouting.AnnotatedConvertersHolder, EasyR
             for (ApplicationModule<?> applicationModule : applicationModules)
                 applicationModule.setupController(router);
 
-            EasyRouting.setupController(router, Application.this);
-            new RpcController(Application.this).setupController(router);
+            EasyRouting.setupController(router, Application.this, Application.this);
+            new RpcController(Application.this, Application.this).setupController(router);
 
             createHttpServer(startPromise, router, port);
 
