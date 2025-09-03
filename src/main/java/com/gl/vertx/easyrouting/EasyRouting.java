@@ -64,8 +64,8 @@ import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
  *
- * @version 0.9.15
- * @since 0.9.15
+ * @version 0.9.16
+ * @since 0.9.16
  */
 public class EasyRouting {
     /**
@@ -89,12 +89,12 @@ public class EasyRouting {
     }
 
     /**
-     * Sets up HTTP request handlers for all supported HTTP methods (GET, POST, DELETE, PUT, PATCH, ANY) based on annotated
-     * methods in the target object.
+     * Sets up HTTP request handlers for all supported HTTP methods (GET, POST, DELETE, PUT, PATCH, ANY) based on
+     * annotated methods in the target object.
      *
-     * @param router the Vert.x Router instance to configure
-     * @param target the object containing annotated handler methods
-     * @param easyRoutingContext context
+     * @param router             the Vert.x Router instance to configure
+     * @param target             the object containing annotated handler methods
+     * @param easyRoutingContext EasyRouting context used to provide template engine, circuit breakers, etc.
      */
     public static void setupController(Router router, Object target, EasyRoutingContext easyRoutingContext) {
         Objects.requireNonNull(router);
@@ -351,36 +351,18 @@ public class EasyRouting {
     }
 
     protected static class RoutingContextHandler implements Handler<RoutingContext> {
+        private static final String KEY_EXCEPTION_TO_HANDLE = "exceptionToHandle";
         private static boolean warnedAboutMissingParameterNames = false;
         private final Annotation annotation;
         private final Object target;
         private final AnnotatedConverters annotatedConverters;
-        private  final EasyRoutingContext easyRoutingContext;
+        private final EasyRoutingContext easyRoutingContext;
 
         public RoutingContextHandler(Annotation annotation, Object target, EasyRoutingContext easyRoutingContext) {
             this.annotation = annotation;
             this.target = target;
             this.annotatedConverters = setupAnnotatedConverters(target);
             this.easyRoutingContext = easyRoutingContext;
-        }
-
-        private EasyRoutingContext getEasyRoutingContext() {
-            return target instanceof EasyRoutingContext context ? context : this.easyRoutingContext;
-        }
-
-        private TemplateEngine getTemplateEngine() {
-            EasyRoutingContext context = getEasyRoutingContext();
-            return context != null ? context.getTemplateEngine() : null;
-        }
-
-        private ServiceDiscovery getServiceDiscovery() {
-            EasyRoutingContext context = getEasyRoutingContext();
-            return context != null ? context.getServiceDiscovery() : null;
-        }
-
-        private Record getPublishedRecord() {
-            EasyRoutingContext context = getEasyRoutingContext();
-            return context != null ? context.getPublishedRecord() : null;
         }
 
         private static void errorHandlerInvocation(Annotation annotation, Set<String> parameterNames, Throwable exception) {
@@ -462,6 +444,40 @@ public class EasyRouting {
             throw new IllegalArgumentException("Unsupported value type: " + to);
         }
 
+        private static HandlesException getAnnotation(Class<?> exceptionClass) {
+            return new HandlesException() {
+
+                @Override
+                public Class<? extends Annotation> annotationType() {
+                    return HandlesException.class;
+                }
+
+                @Override
+                public Class<?> value() {
+                    return exceptionClass;
+                }
+            };
+        }
+
+        private EasyRoutingContext getEasyRoutingContext() {
+            return target instanceof EasyRoutingContext context ? context : this.easyRoutingContext;
+        }
+
+        private TemplateEngine getTemplateEngine() {
+            EasyRoutingContext context = getEasyRoutingContext();
+            return context != null ? context.getTemplateEngine() : null;
+        }
+
+        private ServiceDiscovery getServiceDiscovery() {
+            EasyRoutingContext context = getEasyRoutingContext();
+            return context != null ? context.getServiceDiscovery() : null;
+        }
+
+        private Record getPublishedRecord() {
+            EasyRoutingContext context = getEasyRoutingContext();
+            return context != null ? context.getPublishedRecord() : null;
+        }
+
         private void obtainRpcContext(RoutingContext ctx, Object target) throws RpcContext.RpcException {
             if (annotation != null)
                 return;
@@ -489,19 +505,27 @@ public class EasyRouting {
         }
 
         public void handle(RoutingContext ctx) {
+            handle(ctx, annotation, false);
+        }
+
+        public boolean handle(RoutingContext ctx, Annotation anAnnotation, boolean ignoreMissingMethod) {
+            boolean result = false;
             try {
                 obtainRpcContext(ctx, target);
 
-                MethodResult methodResult = getMethod(ctx, annotation);
+                MethodResult methodResult = getMethod(ctx, anAnnotation);
                 if (methodResult == null) {
-                    logger.error("No handler method for: \"" + annotation + "\" and parameters: " + ctx.request().params().names());
-                    RpcContext rpcContext = RpcContext.getRpcContext(ctx);
-                    if (rpcContext != null) {
-                        rpcContext.getNoMethodRpcResponse().handle(ctx);
-                    } else {
-                        ctx.response().setStatusCode(404).end();
+                    if (! ignoreMissingMethod) {
+                        logger.error("No handler method for: \"" + anAnnotation + "\" and parameters: " + ctx.request().params().names());
+                        RpcContext rpcContext = RpcContext.getRpcContext(ctx);
+                        if (rpcContext != null) {
+                            rpcContext.getNoMethodRpcResponse().handle(ctx);
+                        } else {
+                            ctx.response().setStatusCode(404).end();
+                        }
                     }
                 } else if (checkRequiredRoles(ctx, methodResult.method)) {
+                    result = true;
                     if (methodResult.hasBodyParam) {
                         Buffer bodyBuffer = ctx.body().buffer();
                         try {
@@ -524,6 +548,8 @@ public class EasyRouting {
             } catch (Exception ex) {
                 handleExceptions(ctx, ex);
             }
+
+            return result;
         }
 
         private boolean isParametersAnnotationPresent(Method method, Class<? extends Annotation> annotation) {
@@ -542,14 +568,38 @@ public class EasyRouting {
                 errorHandlerInvocation(annotation, ctx.request().params().names(), ex);
                 throw httpException;
             } else {
-                RpcContext rpcContext = RpcContext.getRpcContext(ctx);
-                if (rpcContext != null) {
-                    rpcContext.getErrorMethodInvocationRpcResponse(ex).handle(ctx);
-                } else {
-                    errorHandlerInvocation(annotation, ctx.request().params().names(), ex);
-                    ctx.fail(500, ex);
+                if (! handleException(ctx, ex)) {
+                    RpcContext rpcContext = RpcContext.getRpcContext(ctx);
+                    if (rpcContext != null) {
+                        rpcContext.getErrorMethodInvocationRpcResponse(ex).handle(ctx);
+                    } else {
+                        errorHandlerInvocation(annotation, ctx.request().params().names(), ex);
+                        ctx.fail(500, ex);
+                    }
                 }
             }
+        }
+
+        private boolean handleException(RoutingContext ctx, Throwable ex) {
+            if (getExceptionToHandle(ctx) != null)
+                return false;
+            Throwable exceptionToHandle = ex instanceof InvocationTargetException itEx ? itEx.getTargetException() : ex;
+            setExceptionToHandle(ctx, exceptionToHandle);
+            Class<?> exceptionClass = exceptionToHandle.getClass();
+            while (exceptionClass != null) {
+                if (handle(ctx, getAnnotation(exceptionClass), true))
+                    return true;
+                exceptionClass = exceptionClass.getSuperclass();
+            }
+            return false;
+        }
+
+        private void setExceptionToHandle(RoutingContext ctx, Throwable ex) {
+            ctx.put(KEY_EXCEPTION_TO_HANDLE, ex);
+        }
+
+        private Throwable getExceptionToHandle(RoutingContext ctx) {
+            return ctx.get(KEY_EXCEPTION_TO_HANDLE);
         }
 
         private void invokeHandlerMethod(RoutingContext ctx, MethodResult handlerMethod, Object[] args) {
@@ -585,7 +635,7 @@ public class EasyRouting {
                         if (ex == null && record != null) {
                             // disallow getting 'this' record to avoid circular processing
                             Record publishedRecord = getPublishedRecord();
-                            if (! record.getName().equals(publishedRecord != null ? publishedRecord.getName() : null)) {
+                            if (!record.getName().equals(publishedRecord != null ? publishedRecord.getName() : null)) {
                                 JsonObject location = record.getLocation();
                                 args[finalI] = URI.create(location.getString("endpoint"));
                             }
@@ -619,7 +669,8 @@ public class EasyRouting {
         private void invokeHandlerMethodBlocking(RoutingContext ctx, MethodResult handlerMethod, Object[] args) {
             Future<Object> future = ctx.vertx().executeBlocking(() -> {
                 try {
-                    return handlerMethod.method().invoke(target, args);
+                    Object result = handlerMethod.method().invoke(target, args);
+                    return result;
                 } catch (Exception e) {
                     handleExceptions(ctx, e);
                     return null;
@@ -738,6 +789,8 @@ public class EasyRouting {
                         otherParamCount++;
                     else if (parameter.getType().equals(RoutingContext.class))
                         otherParamCount++;
+                    else if (Throwable.class.isAssignableFrom(parameter.getType()))
+                        otherParamCount++;
                 }
             }
 
@@ -787,6 +840,9 @@ public class EasyRouting {
                     result.add(null); // add null as placeholder; we will get actual values later
                 } else if (parameter.getType().equals(RoutingContext.class) || parameter.getAnnotation(ContextParam.class) != null) {
                     result.add(ctx);
+                } else if (Throwable.class.isAssignableFrom(parameter.getType())) {
+                    result.add(getExceptionToHandle(ctx));
+                    setExceptionToHandle(ctx, null);
                 } else {
                     Param param = parameter.getAnnotation(Param.class);
                     result.add(convertValue(rpcContext,

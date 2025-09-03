@@ -1,7 +1,9 @@
 package com.gl.vertx.easyrouting;
 
 import com.gl.vertx.easyrouting.annotations.*;
+import io.vertx.ext.web.RoutingContext;
 
+import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -101,13 +103,25 @@ public class UserAdminApplication extends Application {
 
     @ANY("/api/users/*") @ForwardToNode(trustAllCerts = true, circuitBreaker = "user-service", shortenPathBy = "/api/users")
     public URI apiUsers(@NodeURI("user-service") URI userServiceURI) {
+        if (userServiceURI == null)
+            throw new RuntimeException("User service not found");
         return userServiceURI;
+    }
+
+    @ANY("/api/orders/*") @ForwardToNode(trustAllCerts = true, circuitBreaker = "order-service", shortenPathBy = "/api/orders")
+    public URI apiOrders(@NodeURI("order-service") URI orderServiceURI) {
+        return orderServiceURI;
     }
 
     @HandlesStatusCode(401)
     @GET("/unauthenticated")
     Result<?> unauthenticated(@Param(value = "redirect", defaultValue = "") String redirect) {
         return new Result<>("You are not unauthenticated to access this: " + redirect, 401);
+    }
+
+    @HandlesException(Throwable.class)
+    void handleExceptions(RoutingContext ctx, Throwable ex) {
+         ctx.response().setStatusCode(500).end(ex.getMessage());
     }
 }
 

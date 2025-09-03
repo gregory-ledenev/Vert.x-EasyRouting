@@ -59,7 +59,7 @@ To add EasyRouting to your build system, you can use the following Maven depende
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.15</version>
+    <version>0.9.16</version>
 </dependency>
 ```
 To add JavaDoc:
@@ -67,7 +67,7 @@ To add JavaDoc:
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.15</version>
+    <version>0.9.16</version>
     <classifier>javadoc</classifier>
 </dependency>
 ```
@@ -590,6 +590,17 @@ The `@RequiredRoles` annotation allows marking a method that it requires certain
 @RequiredRoles({"user"})
 public User getUser(@Param("id") String id) {
     return userService.getUser(id);
+}
+```
+
+#### @HandlesException
+
+The `@HandlesException` annotation allows marking a method that handles a specific exception type. Note: currently, such methods handle exceptions thrown by the methods of the same scope e.g. in the same application. module or controller.
+
+```java
+@HandlesException(Throwable.class)
+void handleExceptions(RoutingContext ctx, Throwable ex) {
+     ctx.response().setStatusCode(500).end(ex.getMessage());
 }
 ```
 ### Annotating Method Parameters
