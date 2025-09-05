@@ -465,6 +465,34 @@ public class TestApplication {
     }
 
     @Test
+    void testBlockingException() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "blockingException",
+                null,
+                response -> {
+                    assertEquals(500, response.statusCode());
+                });
+    }
+
+    @Test
+    void testRetry() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "retry",
+                null,
+                response -> {
+                    assertEquals(200, response.statusCode());
+                    assertEquals("3", response.body());
+                });
+    }
+
+   @Test
+    void testRetryWithExclusion() throws Throwable {
+        testGET(TestApplicationImpl::new, 8080, "retryWithExclusion",
+                null,
+                response -> {
+                    assertEquals(500, response.statusCode());
+                });
+    }
+
+    @Test
     void testMissingOptionalParam() throws Throwable {
         testGET(TestApplicationImpl::new, 8080, "concatenate?str1=Hello%20&str2=World",
                 null,
@@ -775,6 +803,30 @@ public class TestApplication {
                 // do nothing
             }
             return "Blocking hello from TestApplication!";
+        }
+
+        @Blocking
+        @GET(value = "/blockingException")
+        public String blockingException() {
+            throw new RuntimeException("Blocking exception");
+        }
+
+        private int tryCount = 0;
+
+        @Retry(maxRetries = 3, delay = 500)
+        @GET(value = "/retry")
+        public String retry() {
+            tryCount++;
+            if (tryCount < 3)
+                throw new RuntimeException("Retry exception");
+            else
+                return String.valueOf(tryCount);
+        }
+
+        @Retry(maxRetries = 3, delay = 5000, excludeExceptions = RuntimeException.class)
+        @GET(value = "/retryWithExclusion")
+        public String retryWithExclusion() {
+            throw new RuntimeException("Retry exception");
         }
 
         @Form

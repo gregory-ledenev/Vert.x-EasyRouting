@@ -59,7 +59,7 @@ To add EasyRouting to your build system, you can use the following Maven depende
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.16</version>
+    <version>0.9.17</version>
 </dependency>
 ```
 To add JavaDoc:
@@ -67,7 +67,7 @@ To add JavaDoc:
 <dependency>
     <groupId>io.github.gregory-ledenev</groupId>
     <artifactId>vert.x-easyrouting</artifactId>
-    <version>0.9.16</version>
+    <version>0.9.17</version>
     <classifier>javadoc</classifier>
 </dependency>
 ```
@@ -603,6 +603,18 @@ void handleExceptions(RoutingContext ctx, Throwable ex) {
      ctx.response().setStatusCode(500).end(ex.getMessage());
 }
 ```
+
+#### @Retry
+
+The `@Retry` annotation allows marking methods that should be retried on failure. Note: methods annotated with `@Retry` will be automatically handled as blocking methods.
+
+```java
+@Retry @GET(value = "/retry")
+public String retry() {
+    // some code
+}
+```
+
 ### Annotating Method Parameters
 
 EasyRouting automatically tries to bind request parameters, form arguments, and

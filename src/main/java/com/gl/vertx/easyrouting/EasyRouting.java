@@ -64,14 +64,14 @@ import static com.gl.vertx.easyrouting.annotations.HttpMethods.*;
  * configuration by allowing developers to define routes using annotations and automatically handles parameter binding
  * and response processing.
  *
- * @version 0.9.16
- * @since 0.9.16
+ * @version 0.9.17
+ * @since 0.9.17
  */
 public class EasyRouting {
     /**
      * Current version of the EasyRouting library.
      */
-    public static final String VERSION = "0.9.15";
+    public static final String VERSION = "0.9.17";
     public static final String REDIRECT = "redirect:";
     private static final Logger logger = LoggerFactory.getLogger(EasyRouting.class);
     private static final String ERROR_HANDLING_ANNOTATED_METHOD = "Error handling annotated method: {0}({1}). Error: {2}";
@@ -606,7 +606,7 @@ public class EasyRouting {
             try {
                 boolean needFetchArguments = getServiceDiscovery() != null &&
                         isParametersAnnotationPresent(handlerMethod.method(), NodeURI.class);
-                if (handlerMethod.method().isAnnotationPresent(Blocking.class) && !needFetchArguments) {
+                if (isBlockingAnnotationPresent(handlerMethod) && !needFetchArguments) {
                     invokeHandlerMethodBlocking(ctx, handlerMethod, args);
                 } else if (needFetchArguments) {
                     invokeHandlerMethodFetchArguments(ctx, handlerMethod, args);
@@ -649,7 +649,7 @@ public class EasyRouting {
 
             Future.all(futures).onComplete((aCompositeFuture, aThrowable) -> {
                 try {
-                    if (handlerMethod.method().isAnnotationPresent(Blocking.class)) {
+                    if (isBlockingAnnotationPresent(handlerMethod)) {
                         invokeHandlerMethodBlocking(ctx, handlerMethod, args);
                     } else {
                         invokeHandlerMethodNonBlocking(ctx, handlerMethod, args);
@@ -660,6 +660,18 @@ public class EasyRouting {
             });
         }
 
+        private static boolean isBlockingAnnotationPresent(MethodResult handlerMethod) {
+            Method method = handlerMethod.method();
+            if (method.isAnnotationPresent(Blocking.class))
+                return true;
+
+            for (Annotation annotation : method.getAnnotations())
+                if (annotation.annotationType().isAnnotationPresent(Blocking.class))
+                    return true;
+
+            return false;
+        }
+
         private void invokeHandlerMethodNonBlocking(RoutingContext ctx, MethodResult handlerMethod, Object[] args) throws IllegalAccessException, InvocationTargetException {
             Object result = handlerMethod.method().invoke(target, args);
             if (!ctx.response().ended())
@@ -668,13 +680,35 @@ public class EasyRouting {
 
         private void invokeHandlerMethodBlocking(RoutingContext ctx, MethodResult handlerMethod, Object[] args) {
             Future<Object> future = ctx.vertx().executeBlocking(() -> {
-                try {
-                    Object result = handlerMethod.method().invoke(target, args);
-                    return result;
-                } catch (Exception e) {
-                    handleExceptions(ctx, e);
-                    return null;
+                Retry retry = handlerMethod.method().getAnnotation(Retry.class);
+
+                Set<Class<?>> excludeExceptions = retry != null ?
+                        Set.of(retry.excludeExceptions()) : Collections.emptySet();
+                int tryCount = retry != null ? retry.maxRetries() : 1;
+                long delay = retry != null ? retry.delay() : 0;
+
+                for (int i = 0; i < tryCount; i++) {
+                    try {
+                        return handlerMethod.method().invoke(target, args);
+                    } catch (Exception ex) {
+                        Class<?> exceptionClass = ex instanceof InvocationTargetException ite ?
+                                ite.getTargetException().getClass() : ex.getClass();
+                        if (excludeExceptions.contains(exceptionClass) ||  i >= tryCount - 1) {
+                            handleExceptions(ctx, ex);
+                            return null;
+                        } else {
+                            logger.error("Caught an exception, retrying...", ex);
+                        }
+                    }
+                    if (i < tryCount - 1 && delay > 0) {
+                        try {
+                            Thread.sleep(delay);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
                 }
+                return null;
             });
             future.onComplete((result, e) -> {
                 if (e == null) {

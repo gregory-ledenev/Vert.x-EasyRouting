@@ -32,21 +32,38 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Annotation to mark methods that should be executed as blocking operations.
- * When applied to a method, it indicates that the method's execution
- * will be automatically processed on a worker thread rather than the event loop,
- * preventing the event loop from being blocked. Use this annotation to mark
- * operations that may take a long time and safely add any blocking code to such methods.
- *
- * <p>Usage example:</p>
- * <pre>
- *     {@code @Blocking}
- *     public void someBlockingOperation() {
- *         // Method code that may block
- *     }
- * </pre>
+ * Annotation to mark methods that should be retried on failure. Methods annotated with @Retry will automatically retry
+ * execution if they throw an exception (which is not in the exclusion list), up to the specified maximum number of
+ * retries with a configurable delay between attempts.
+ * <p>
+ * Note:
+ * <ol>
+ *  <li>This annotation automatically includes @Blocking behavior.</li>
+ *  <li>Intermediate exceptions thrown during retry attempts will not be forwarded to handlers. Only the last exception
+ *  will be.</li>
+ * <ol/>
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.METHOD, ElementType.ANNOTATION_TYPE})
-public @interface Blocking {
+@Blocking
+@Target(ElementType.METHOD)
+public @interface Retry {
+    /**
+     * Maximum number of retry attempts.
+     * @return the maximum number of retries (default: 3)
+     */
+    int maxRetries() default 3;
+    
+    /**
+     * Delay between retry attempts in milliseconds.
+     * @return the delay in milliseconds (default: 100)
+     */
+    long delay() default 100;
+
+    /**
+     * Exception types that should not trigger retries.
+     * If any of these exception types are thrown, the method will fail immediately
+     * without attempting retries.
+     * @return array of exception classes to exclude from retry logic (default: empty)
+     */
+    Class<?>[] excludeExceptions() default {};
 }
