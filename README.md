@@ -88,11 +88,12 @@ To add JavaDoc:
 - Automatic handling of blocking operations
 - Redirect handling
 - Builtin JWT authentication and role-based authorization
-- Binding methods to HTTP error codes
-- Ready-to use application class for prototyping and testing
+- Binding methods to handles HTTP errors
+- Ready-to use application class for quick start of development
 - No code JSON-RPC 2.0 support
 - Automatic scheme discovery for JSON-RPC applications and modules
 - Easy implementation of custom data converters
+- Automatic clustering and microservices configuration and discovery
 
 ## EasyRouting Application
 
@@ -606,7 +607,11 @@ void handleExceptions(RoutingContext ctx, Throwable ex) {
 
 #### @Retry
 
-The `@Retry` annotation allows marking methods that should be retried on failure. Note: methods annotated with `@Retry` will be automatically handled as blocking methods.
+The `@Retry` annotation allows marking methods that should be retried on failure. 
+
+Note: you should use it with caution for any handler methods other than `GET` as it may cause various side effects and race-conditions. 
+
+Note: methods annotated with `@Retry` will be automatically handled as blocking methods.
 
 ```java
 @Retry @GET(value = "/retry")
